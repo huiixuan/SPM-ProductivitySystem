@@ -1,5 +1,6 @@
 # Ignore backend virtual environment
 /backend/venv/
+/backend/.venv/
 
 # Python caches
 __pycache__/
