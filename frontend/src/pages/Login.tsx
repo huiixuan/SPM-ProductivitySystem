@@ -1,18 +1,41 @@
 import { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 
-interface LoginProps {
-	onSwitchToRegister: () => void;
-}
-
-export default function Login({ onSwitchToRegister }: LoginProps) {
+export default function Login() {
 	const [username, setUsername] = useState("");
 	const [password, setPassword] = useState("");
 	const [rememberMe, setRememberMe] = useState(false);
+	const [error, setError] = useState("");
+	const navigate = useNavigate();
 
-	const handleSubmit = (e: React.FormEvent) => {
+	const handleSubmit = async (e: React.FormEvent) => {
 		e.preventDefault();
-		console.log({ username, password, rememberMe });
-		// Later: call your Flask backend here
+
+		if (!username || !password) {
+			setError("Both fields are required.");
+			return;
+		}
+
+		try {
+			const response = await fetch("http://127.0.0.1:5000/auth/login", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ username, password }),
+			});
+
+			const data = await response.json();
+
+			if (response.ok) {
+				setError("");
+				alert("Login successful!");
+				navigate("/HomePage"); // redirect to homepage
+			} else {
+				setError(data.error || "Invalid username or password");
+			}
+		} catch (err) {
+			console.error("Login error:", err);
+			setError("Server error. Please try again later.");
+		}
 	};
 
 	return (
@@ -47,6 +70,19 @@ export default function Login({ onSwitchToRegister }: LoginProps) {
 				>
 					Login
 				</h1>
+
+				{/* Error message */}
+				{error && (
+					<p
+						style={{
+							color: "red",
+							fontSize: "0.9rem",
+							marginBottom: "1rem",
+						}}
+					>
+						{error}
+					</p>
+				)}
 
 				{/* Username */}
 				<div style={{ marginBottom: "1rem" }}>
@@ -146,12 +182,9 @@ export default function Login({ onSwitchToRegister }: LoginProps) {
 					}}
 				>
 					Don’t have an account?{" "}
-					<span
-						onClick={onSwitchToRegister}
-						style={{ color: "#2563eb", cursor: "pointer" }}
-					>
+					<Link to="/register" style={{ color: "#2563eb" }}>
 						Register
-					</span>
+					</Link>
 				</p>
 			</form>
 		</div>

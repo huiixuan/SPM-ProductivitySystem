@@ -1,17 +1,15 @@
 import { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 
-interface RegisterProps {
-	onSwitchToLogin: () => void;
-}
-
-export default function Register({ onSwitchToLogin }: RegisterProps) {
+export default function Register() {
 	const [role, setRole] = useState("");
 	const [name, setName] = useState("");
 	const [username, setUsername] = useState("");
 	const [password, setPassword] = useState("");
 	const [error, setError] = useState("");
+	const navigate = useNavigate();
 
-	const handleSubmit = (e: React.FormEvent) => {
+	const handleSubmit = async (e: React.FormEvent) => {
 		e.preventDefault();
 
 		if (!role) {
@@ -24,9 +22,32 @@ export default function Register({ onSwitchToLogin }: RegisterProps) {
 			return;
 		}
 
-		setError(""); // clear errors if all good
-		console.log({ role, name, username, password });
-		// To do: configure Flask backend here
+		try {
+			const response = await fetch(
+				"http://127.0.0.1:5000/auth/register",
+				{
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({ role, name, username, password }),
+				}
+			);
+
+			const data = await response.json();
+
+			if (response.ok) {
+				setError(""); // clear error if success
+				alert("Registration successful!");
+				navigate("/"); // go back to Login
+			} else {
+				// Backend error (e.g. duplicate username)
+				setError(
+					data.error || "Registration failed. Please try again."
+				);
+			}
+		} catch (err) {
+			console.error("Error registering user:", err);
+			setError("Server error. Please try again later.");
+		}
 	};
 
 	return (
@@ -208,12 +229,9 @@ export default function Register({ onSwitchToLogin }: RegisterProps) {
 					}}
 				>
 					Already have an account?{" "}
-					<span
-						onClick={onSwitchToLogin}
-						style={{ color: "#2563eb", cursor: "pointer" }}
-					>
+					<Link to="/" style={{ color: "#2563eb" }}>
 						Login
-					</span>
+					</Link>
 				</p>
 			</form>
 		</div>

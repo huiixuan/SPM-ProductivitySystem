@@ -1,16 +1,18 @@
 import "./index.css";
-import { useState } from "react";
-import HomePage from "@/pages/HomePage";
-import Login from "@/pages/Login";
-import Register from "@/pages/Register";
+import HomePage from "./pages/HomePage";
+import { BrowserRouter, Route, Routes } from "react-router-dom";
+import Login from "./pages/Login";
+import Register from "./pages/Register";
 
 function App() {
-	const [showLogin, setShowLogin] = useState(true);
-
-	return showLogin ? (
-		<Login onSwitchToRegister={() => setShowLogin(false)} />
-	) : (
-		<Register onSwitchToLogin={() => setShowLogin(true)} />
+	return (
+		<BrowserRouter>
+			<Routes>
+				<Route path="/" element={<Login />} />
+				<Route path="/register" element={<Register />} />
+				<Route path="/HomePage" element={<HomePage />} />
+			</Routes>
+		</BrowserRouter>
 	);
 }
 
