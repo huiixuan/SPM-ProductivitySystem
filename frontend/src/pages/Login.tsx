@@ -1,6 +1,10 @@
 import { useState } from "react";
 
-export default function Login() {
+interface LoginProps {
+	onSwitchToRegister: () => void;
+}
+
+export default function Login({ onSwitchToRegister }: LoginProps) {
 	const [username, setUsername] = useState("");
 	const [password, setPassword] = useState("");
 	const [rememberMe, setRememberMe] = useState(false);
@@ -142,9 +146,12 @@ export default function Login() {
 					}}
 				>
 					Don’t have an account?{" "}
-					<a href="#" style={{ color: "#2563eb" }}>
+					<span
+						onClick={onSwitchToRegister}
+						style={{ color: "#2563eb", cursor: "pointer" }}
+					>
 						Register
-					</a>
+					</span>
 				</p>
 			</form>
 		</div>
