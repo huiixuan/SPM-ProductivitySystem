@@ -1,6 +1,6 @@
-import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
 import { z } from "zod"
+import { EmailCombobox } from "@/components/TaskManagement/EmailCombobox"
 import {
   Form,
   FormControl,
@@ -120,7 +120,16 @@ export function TaskCreation() {
                 <FormItem>
                   <FormLabel>Task Owner</FormLabel>
                   <FormControl>
-                    
+                    <EmailCombobox value={field.value} onChange={field.onChange} placeholder="Select Task Owner..." />
+                  </FormControl>
+                </FormItem>
+              )} />
+
+              <FormField control={form.control} name="collaborators" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Collaborators</FormLabel>
+                  <FormControl>
+                    <EmailCombobox value={field.value} onChange={field.onChange} placeholder="Select Collaborators..." multiple />
                   </FormControl>
                 </FormItem>
               )} />

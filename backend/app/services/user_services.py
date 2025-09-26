@@ -4,7 +4,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 def get_all_emails():
     try:
-        users_email = User.query.with_entities(User.username).all()
+        users_email = User.query.with_entities(User.email).all()
         return [email for (email,) in users_email]
     
     except SQLAlchemyError as e:

@@ -6,6 +6,12 @@ import enum
 
 db = SQLAlchemy()
 
+class UserRole(enum.Enum):
+    STAFF = "Staff"
+    MANAGER = "Manager"
+    DIRECTOR = "Director"
+    HR = "HR"
+
 class TaskStatus(enum.Enum):
     UNASSIGNED = "Unassigned"
     ONGOING = "Ongoing"
@@ -22,8 +28,9 @@ class User(db.Model):
     __tablename__ = "users"
     
     id = db.Column(db.Integer, primary_key=True)
-    role = db.Column(db.String(50), nullable=False)
-    email = db.Column(db.String(100), nullable=False)
+    role = db.Column(db.Enum(UserRole, native_enum=False), nullable=False, default=UserRole.STAFF)
+    name = db.Column(db.String(80), nullable=False)
+    email = db.Column(db.String(100), unique=True, nullable=False)
     password_hash = db.Column(db.String(200), nullable=False)
 
     owned_tasks = relationship("Task", back_populates="owner")
