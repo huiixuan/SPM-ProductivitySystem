@@ -52,6 +52,8 @@ class User(db.Model):
     owned_projects = relationship("Project", back_populates="owner")
     projects = relationship("Project", secondary=project_collaborators, back_populates="collaborators")
 
+    owned_tasks = relationship("Task", back_populates="owner")
+
     tasks = relationship(
         "Task", secondary=task_collaborators, back_populates="collaborators"
     )
@@ -78,6 +80,14 @@ class Task(db.Model):
 
     owner = relationship("User", back_populates="owned_tasks")
     project = relationship("Project", back_populates="project_tasks")
+
+    collaborators = relationship(
+        "User", secondary=task_collaborators, back_populates="tasks"
+    )
+
+    attachments = relationship(
+        "Attachment", back_populates="task", cascade="all, delete-orphan"
+    )
 
     collaborators = relationship(
         "User", secondary=task_collaborators, back_populates="tasks"
