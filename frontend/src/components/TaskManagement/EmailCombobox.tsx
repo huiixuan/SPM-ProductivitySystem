@@ -37,7 +37,7 @@ export function EmailCombobox({ value, onChange, placeholder = "Select email..."
         })
         return res.json()
       })
-      .then(data => setUsers(data))
+      .then((data: string[]) => setUsers(data as string[]))
       .catch(err => setError(err.message))
   }, [])
 
@@ -62,7 +62,12 @@ export function EmailCombobox({ value, onChange, placeholder = "Select email..."
     }
   }
 
-  const handleCancelEmail = (email: string) => {
+  const handleCancelEmail = (email: string, event?: React.MouseEvent) => {
+    if (event) {
+      event.preventDefault()
+      event.stopPropagation()
+    }
+
     const updated = selected.filter(e => e !== email)
     setSelected(updated)
     if (onChange) onChange(updated)
@@ -74,12 +79,17 @@ export function EmailCombobox({ value, onChange, placeholder = "Select email..."
         <Button variant="outline" role="combobox" aria-expanded={open} className="w-full flex items-center justify-between bg-white">
           {multiple ? ( 
             selected.length > 0 ? ( 
-              selected.map(email => (
-                <Badge key={email} variant="outline" className="py-1 px-2">
-                  {email}
-                  <X className="cursor-pointer" onClick={(e) => {e.stopPropagation(); handleCancelEmail(email)}} />
-                </Badge>
-              ))
+              <div className="flex flex-row gap-2">
+                {selected.map(email => (
+                  <Badge key={email} variant="outline" className="py-1 px-2">
+                    {email}
+                    <button type="button" onClick={(e) => {handleCancelEmail(email, e)}}>
+                      <X />
+                    </button>
+                    
+                  </Badge>
+                ))}
+              </div>
             ) : (
               <span className="text-gray-400">{placeholder}</span>
             )
@@ -91,12 +101,12 @@ export function EmailCombobox({ value, onChange, placeholder = "Select email..."
             )
           )}
 
-          {selected.length === 0 && <ChevronDown className="opacity-50" />}
+          <ChevronDown className="opacity-50" />
         </Button>
       </PopoverTrigger>
       
-      <PopoverContent>
-        {error && (<div className="text-red">{error}</div>)}
+      <PopoverContent className="w-full">
+        {error && (<div className="text-red-700">{error}</div>)}
 
         <Command>
           <CommandInput placeholder="Search by email..." />

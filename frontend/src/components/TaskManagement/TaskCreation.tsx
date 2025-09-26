@@ -38,6 +38,7 @@ const formSchema = z.object({
   status: z.string().min(1, "Select a status."),
   owner: z.string().min(1, "Task owner is required."),
   collaborators: z.array(z.string()).optional,
+  notes: z.string().optional(),
   attachments: z.array(z.instanceof(File)).optional().default([])
 })
 type TaskFormData = z.infer<typeof formSchema>
@@ -129,7 +130,16 @@ export function TaskCreation() {
                 <FormItem>
                   <FormLabel>Collaborators</FormLabel>
                   <FormControl>
-                    <EmailCombobox value={field.value} onChange={field.onChange} placeholder="Select Collaborators..." multiple />
+                    <EmailCombobox value={field.value as string[]} onChange={field.onChange} placeholder="Select Collaborators..." multiple />
+                  </FormControl>
+                </FormItem>
+              )} />
+
+              <FormField control={form.control} name="notes" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Notes</FormLabel>
+                  <FormControl>
+
                   </FormControl>
                 </FormItem>
               )} />
