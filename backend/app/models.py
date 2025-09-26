@@ -52,6 +52,12 @@ class User(db.Model):
     owned_projects = relationship("Project", back_populates="owner")
     projects = relationship("Project", secondary=project_collaborators, back_populates="collaborators")
 
+    owned_tasks = relationship("Task", back_populates="owner")
+
+    tasks = relationship(
+        "Task", secondary=task_collaborators, back_populates="collaborators"
+    )
+
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
 
@@ -71,8 +77,14 @@ class Task(db.Model):
     owner_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
 
     owner = relationship("User", back_populates="owned_tasks")
-    collaborators = relationship("User", secondary=task_collaborators, back_populates="tasks")
-    attachments = relationship("Attachment", back_populates="task", cascade="all, delete-orphan")
+
+    collaborators = relationship(
+        "User", secondary=task_collaborators, back_populates="tasks"
+    )
+
+    attachments = relationship(
+        "Attachment", back_populates="task", cascade="all, delete-orphan"
+    )
 
 class Attachment(db.Model):
     __tablename__ = "attachments"
