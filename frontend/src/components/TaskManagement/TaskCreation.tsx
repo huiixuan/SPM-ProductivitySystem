@@ -139,7 +139,7 @@ export function TaskCreation() {
                 <FormItem>
                   <FormLabel>Notes</FormLabel>
                   <FormControl>
-
+                    <Textarea defaultValue="" {...field} />
                   </FormControl>
                 </FormItem>
               )} />
