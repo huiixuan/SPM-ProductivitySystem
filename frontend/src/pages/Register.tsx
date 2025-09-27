@@ -1,13 +1,21 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { Button } from "../components/ui/button";
+import {
+	Card,
+	CardHeader,
+	CardTitle,
+	CardContent,
+	CardFooter,
+} from "../components/ui/card";
 
 export default function Register() {
 	const [role, setRole] = useState("");
-	const [name, setName] = useState("");
-	const [username, setUsername] = useState("");
+	const [email, setEmail] = useState("");
 	const [password, setPassword] = useState("");
 	const [error, setError] = useState("");
 	const navigate = useNavigate();
+	const isValid = Boolean(email.trim() && password.trim()); // for button enable/disable
 
 	const handleSubmit = async (e: React.FormEvent) => {
 		e.preventDefault();
@@ -17,7 +25,7 @@ export default function Register() {
 			return;
 		}
 
-		if (!name || !username || !password) {
+		if (!email || !password) {
 			setError("All fields are required.");
 			return;
 		}
@@ -28,7 +36,7 @@ export default function Register() {
 				{
 					method: "POST",
 					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify({ role, name, username, password }),
+					body: JSON.stringify({ role, email, password }),
 				}
 			);
 
@@ -51,189 +59,94 @@ export default function Register() {
 	};
 
 	return (
-		<div
-			style={{
-				display: "flex",
-				justifyContent: "center",
-				alignItems: "center",
-				height: "100vh",
-				width: "100vw",
-				backgroundColor: "#f3f4f6",
-			}}
-		>
-			<form
-				onSubmit={handleSubmit}
-				style={{
-					background: "white",
-					padding: "2rem",
-					borderRadius: "8px",
-					boxShadow: "0 4px 6px rgba(0,0,0,0.1)",
-					width: "100%",
-					maxWidth: "400px",
-				}}
-			>
-				<h1
-					style={{
-						textAlign: "center",
-						fontSize: "2rem",
-						fontWeight: "bold",
-						marginBottom: "1.5rem",
-					}}
-				>
-					Register
-				</h1>
+		<div className="fixed inset-0 grid place-items-center">
+			<Card className="w-full max-w-sm mx-4">
+				<CardHeader>
+					<CardTitle className="text-center text-2xl">
+						Register
+					</CardTitle>
+				</CardHeader>
 
-				{/* Role */}
-				<div style={{ marginBottom: "1.5rem" }}>
-					<p style={{ marginBottom: "0.5rem", fontWeight: "500" }}>
-						I am a:
-					</p>
-					<div
-						style={{
-							display: "flex",
-							justifyContent: "space-between",
-						}}
-					>
-						{["Staff", "Manager", "Director", "HR"].map((r) => (
-							<button
-								type="button"
-								key={r}
-								onClick={() => setRole(r)}
-								style={{
-									flex: 1,
-									margin: "0 0.25rem",
-									padding: "0.5rem",
-									borderRadius: "4px",
-									border:
-										role === r
-											? "2px solid #2563eb"
-											: "1px solid #ccc",
-									backgroundColor:
-										role === r ? "#2563eb" : "white",
-									color: role === r ? "white" : "black",
-									cursor: "pointer",
-									fontWeight: role === r ? "bold" : "normal",
-								}}
+				<CardContent>
+					{error && (
+						<p className="text-red-500 text-sm mb-4">{error}</p>
+					)}
+
+					<form onSubmit={handleSubmit} className="space-y-4">
+						{/* Role Selection */}
+						<div>
+							<p className="mb-2 font-medium">I am a:</p>
+							<div className="flex justify-between">
+								{["Staff", "Manager", "Director", "HR"].map(
+									(r) => (
+										<Button
+											key={r}
+											type="button"
+											onClick={() => setRole(r)}
+											className={`flex-1 ${
+												role === r ? "font-bold" : ""
+											}`}
+										>
+											{r.charAt(0).toUpperCase() +
+												r.slice(1)}
+										</Button>
+									)
+								)}
+							</div>
+						</div>
+
+						{/* Email */}
+						<div>
+							<label
+								htmlFor="email"
+								className="block text-sm font-medium mb-1"
 							>
-								{r}
-							</button>
-						))}
-					</div>
-				</div>
+								Email
+							</label>
+							<input
+								id="email"
+								type="email"
+								value={email}
+								onChange={(e) => setEmail(e.target.value)}
+								className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring focus:ring-blue-500"
+							/>
+						</div>
 
-				{/* Name */}
-				<div style={{ marginBottom: "1rem" }}>
-					<label
-						htmlFor="name"
-						style={{ display: "block", marginBottom: "0.5rem" }}
-					>
-						Name
-					</label>
-					<input
-						id="name"
-						type="text"
-						value={name}
-						onChange={(e) => setName(e.target.value)}
-						required
-						style={{
-							width: "100%",
-							padding: "0.5rem",
-							border: "1px solid #ccc",
-							borderRadius: "4px",
-						}}
-					/>
-				</div>
+						{/* Password */}
+						<div>
+							<label
+								htmlFor="password"
+								className="block text-sm font-medium mb-1"
+							>
+								Password
+							</label>
+							<input
+								id="password"
+								type="password"
+								value={password}
+								onChange={(e) => setPassword(e.target.value)}
+								className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring focus:ring-blue-500"
+							/>
+						</div>
 
-				{/* Username */}
-				<div style={{ marginBottom: "1rem" }}>
-					<label
-						htmlFor="username"
-						style={{ display: "block", marginBottom: "0.5rem" }}
-					>
-						Username
-					</label>
-					<input
-						id="username"
-						type="text"
-						value={username}
-						onChange={(e) => setUsername(e.target.value)}
-						required
-						style={{
-							width: "100%",
-							padding: "0.5rem",
-							border: "1px solid #ccc",
-							borderRadius: "4px",
-						}}
-					/>
-				</div>
+						<Button
+							type="submit"
+							className={`w-full ${isValid ? "font-bold " : ""}`}
+						>
+							Register
+						</Button>
+					</form>
+				</CardContent>
 
-				{/* Password */}
-				<div style={{ marginBottom: "1rem" }}>
-					<label
-						htmlFor="password"
-						style={{ display: "block", marginBottom: "0.5rem" }}
-					>
-						Password
-					</label>
-					<input
-						id="password"
-						type="password"
-						value={password}
-						onChange={(e) => setPassword(e.target.value)}
-						required
-						style={{
-							width: "100%",
-							padding: "0.5rem",
-							border: "1px solid #ccc",
-							borderRadius: "4px",
-						}}
-					/>
-				</div>
-
-				{/* Error message */}
-				{error && (
-					<p
-						style={{
-							color: "red",
-							fontSize: "0.85rem",
-							marginBottom: "1rem",
-						}}
-					>
-						{error}
+				<CardFooter className="flex justify-center">
+					<p className="text-sm">
+						Already have an account?{" "}
+						<Link to="/" className="text-blue-500 hover:underline">
+							Login
+						</Link>
 					</p>
-				)}
-
-				{/* Submit */}
-				<button
-					type="submit"
-					style={{
-						width: "100%",
-						backgroundColor: "#16a34a",
-						color: "white",
-						padding: "0.75rem",
-						border: "none",
-						borderRadius: "4px",
-						cursor: "pointer",
-						fontWeight: "bold",
-					}}
-				>
-					Register
-				</button>
-
-				{/* Back to Login */}
-				<p
-					style={{
-						textAlign: "center",
-						marginTop: "1rem",
-						fontSize: "0.9rem",
-					}}
-				>
-					Already have an account?{" "}
-					<Link to="/" style={{ color: "#2563eb" }}>
-						Login
-					</Link>
-				</p>
-			</form>
+				</CardFooter>
+			</Card>
 		</div>
 	);
 }

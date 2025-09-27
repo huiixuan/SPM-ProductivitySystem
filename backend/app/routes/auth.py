@@ -1,50 +1,42 @@
 from flask import Blueprint, request, jsonify
-from app.models import db, User
+from app.services.user_service import create_user, validate_login, get_user_by_email
 
 auth_bp = Blueprint('auth', __name__)
 
 @auth_bp.route('/login', methods=['POST'])
 def login():
     data = request.get_json()
-    username = data.get("username")
+    email = data.get("email")
     password = data.get("password")
 
-    if not username or not password:
-        return jsonify({"error": "Username and password are required"}), 400
+    if not email or not password:
+        return jsonify({"error": "email and password are required"}), 400
 
-    user = User.query.filter_by(username=username).first()
+    user = validate_login(email, password)
 
-    if user and user.check_password(password):
+    if user:
         return jsonify({"message": "Login successful", "user": {
             "id": user.id,
             "role": user.role,
-            "name": user.name,
-            "username": user.username
+            "email": user.email
         }}), 200
     else:
-        return jsonify({"error": "Invalid username or password"}), 401
+        return jsonify({"error": "Invalid email or password"}), 401
 
 @auth_bp.route('/register', methods=['POST'])
 def register():
     data = request.get_json()
-
     role = data.get("role")
-    name = data.get("name")
-    username = data.get("username")
+    email = data.get("email")
     password = data.get("password")
 
-    if not role or not name or not username or not password:
+    if not role or not email or not password:
         return jsonify({"error": "All fields are required"}), 400
 
-    # Check if username already exists
-    if User.query.filter_by(username=username).first():
-        return jsonify({"error": "Username already exists"}), 400
+    # Check if email already exists
+    if get_user_by_email(email):
+        return jsonify({"error": "Email already exists"}), 400
 
     # Create new user
-    user = User(role=role, name=name, username=username)
-    user.set_password(password)
-
-    db.session.add(user)
-    db.session.commit()
-
+    create_user(email, role, password)
     return jsonify({"message": "User registered successfully"}), 201
