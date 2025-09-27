@@ -109,3 +109,10 @@
     background-color: #f9f9f9;
   }
 }
+
+
+*/
+[data-state="open"] .bg-black\/80 {
+  background-color: white !important;
+  opacity: 1 !important;
+}
