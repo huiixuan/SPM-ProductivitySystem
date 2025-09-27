@@ -1,62 +1,38 @@
-import { useState, useEffect } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useState } from "react";
+import { Link } from "react-router-dom";
 
-export default function Login() {
+export default function ForgotPassword() {
     const [username, setUsername] = useState("");
-    const [password, setPassword] = useState("");
-    const [rememberMe, setRememberMe] = useState(false);
-    const [error, setError] = useState("");
-    const navigate = useNavigate();
-
-    // Load saved credentials when the page loads
-    useEffect(() => {
-        const savedUsername = localStorage.getItem("savedUsername");
-        const savedPassword = localStorage.getItem("savedPassword");
-        if (savedUsername && savedPassword) {
-            setUsername(savedUsername);
-            setPassword(savedPassword);
-            setRememberMe(true);
-        }
-    }, []);
+    const [newPassword, setNewPassword] = useState("");
+    const [message, setMessage] = useState("");
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
-        if (!username || !password) {
-            setError("Both fields are required.");
+        if (!username || !newPassword) {
+            setMessage("Both fields are required.");
             return;
         }
 
         try {
-            const response = await fetch("http://127.0.0.1:5000/auth/login", {
+            const response = await fetch("http://127.0.0.1:5000/auth/forgot-password", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ username, password }),
+                body: JSON.stringify({ username, new_password: newPassword }),
             });
 
             const data = await response.json();
 
             if (response.ok) {
-                setError("");
-                localStorage.setItem("token", data.access_token); // save JWT
-
-                // Save or clear credentials depending on Remember Me
-                if (rememberMe) {
-                    localStorage.setItem("savedUsername", username);
-                    localStorage.setItem("savedPassword", password);
-                } else {
-                    localStorage.removeItem("savedUsername");
-                    localStorage.removeItem("savedPassword");
-                }
-
-                alert("Login successful!");
-                navigate("/HomePage");
+                setMessage("Password reset successful!");
+                setUsername("");
+                setNewPassword("");
             } else {
-                setError(data.error || "Invalid username or password");
+                setMessage(data.error || "Error resetting password");
             }
         } catch (err) {
-            console.error("Login error:", err);
-            setError("Server error. Please try again later.");
+            console.error("Password reset error:", err);
+            setMessage("Server error. Please try again later.");
         }
     };
 
@@ -90,25 +66,26 @@ export default function Login() {
                         marginBottom: "1.5rem",
                     }}
                 >
-                    Login
+                    Reset Password
                 </h1>
 
-                {error && (
+                {message && (
                     <p
                         style={{
-                            color: "red",
+                            color: message.includes("successful") ? "green" : "red",
                             fontSize: "0.9rem",
                             marginBottom: "1rem",
+                            textAlign: "center",
                         }}
                     >
-                        {error}
+                        {message}
                     </p>
                 )}
 
                 <div style={{ marginBottom: "1rem" }}>
                     <label
                         htmlFor="username"
-                        style={{ display: "block", marginBottom: "0.5rem" }}
+                        style={{ display: "block", marginBottom: "0.5rem", fontWeight: "500" }}
                     >
                         Username
                     </label>
@@ -127,18 +104,18 @@ export default function Login() {
                     />
                 </div>
 
-                <div style={{ marginBottom: "1rem" }}>
+                <div style={{ marginBottom: "1.5rem" }}>
                     <label
-                        htmlFor="password"
-                        style={{ display: "block", marginBottom: "0.5rem" }}
+                        htmlFor="newPassword"
+                        style={{ display: "block", marginBottom: "0.5rem", fontWeight: "500" }}
                     >
-                        Password
+                        New Password
                     </label>
                     <input
-                        id="password"
+                        id="newPassword"
                         type="password"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
                         required
                         style={{
                             width: "100%",
@@ -147,31 +124,6 @@ export default function Login() {
                             borderRadius: "4px",
                         }}
                     />
-                </div>
-
-                <div
-                    style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                        marginBottom: "1rem",
-                    }}
-                >
-                    <label style={{ fontSize: "0.9rem" }}>
-                        <input
-                            type="checkbox"
-                            checked={rememberMe}
-                            onChange={(e) => setRememberMe(e.target.checked)}
-                            style={{ marginRight: "0.5rem" }}
-                        />
-                        Remember me
-                    </label>
-                    <Link
-                        to="/forgot-password"
-                        style={{ fontSize: "0.9rem", color: "#2563eb" }}
-                    >
-                        Forgot Password?
-                    </Link>
                 </div>
 
                 <button
@@ -187,7 +139,7 @@ export default function Login() {
                         fontWeight: "bold",
                     }}
                 >
-                    Login
+                    Reset Password
                 </button>
 
                 <p
@@ -197,9 +149,9 @@ export default function Login() {
                         fontSize: "0.9rem",
                     }}
                 >
-                    Don't have an account?{" "}
-                    <Link to="/register" style={{ color: "#2563eb" }}>
-                        Register
+                    Remember your password?{" "}
+                    <Link to="/" style={{ color: "#2563eb" }}>
+                        Login
                     </Link>
                 </p>
             </form>

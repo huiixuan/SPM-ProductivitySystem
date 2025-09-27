@@ -1,0 +1,16 @@
+{
+  "ExpandedNodes": [
+    "",
+    "\\backend",
+    "\\backend\\migrations",
+    "\\backend\\venv",
+    "\\frontend",
+    "\\frontend\\src",
+    "\\frontend\\src\\assets",
+    "\\frontend\\src\\components",
+    "\\frontend\\src\\lib",
+    "\\frontend\\src\\pages"
+  ],
+  "SelectedNode": "\\backend\\app\\routes\\auth.py",
+  "PreviewInSolutionExplorer": false
+}
