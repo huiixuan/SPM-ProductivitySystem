@@ -1,0 +1,16 @@
+{
+  "ExpandedNodes": [
+    "",
+    "\\backend",
+    "\\backend\\app",
+    "\\backend\\app\\services",
+    "\\backend\\migrations",
+    "\\frontend",
+    "\\frontend\\src",
+    "\\frontend\\src\\assets",
+    "\\frontend\\src\\components",
+    "\\frontend\\src\\lib",
+    "\\frontend\\src\\pages"
+  ],
+  "PreviewInSolutionExplorer": false
+}
