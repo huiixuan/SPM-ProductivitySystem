@@ -1,7 +1,7 @@
 import pytest
 from app import create_app
 from app.models import db, User
-from app.services.user_service import create_user, get_user_by_email, validate_login
+from backend.app.services.user_services import create_user, get_user_by_email, validate_login
 
 @pytest.fixture
 def app():
