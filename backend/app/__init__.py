@@ -1,9 +1,6 @@
 from flask import Flask
-<<<<<<< Updated upstream
 from flask_cors import CORS
-=======
 from flask_sqlalchemy import SQLAlchemy
->>>>>>> Stashed changes
 from flask_migrate import Migrate
 from flask_cors import CORS
 from flask_bcrypt import Bcrypt
@@ -23,7 +20,7 @@ load_dotenv()
 def create_app():
     app = Flask(__name__)
     app.config.from_object("config.Config")
-    CORS(app) 
+    CORS(app)
     CORS(app, resources={r"/*": {"origins": "*"}})
 
     # JWT config
