@@ -1,4 +1,4 @@
-from app.models import db, Task, User, Attachment, TaskStatus
+from app.models import db, Task, Attachment
 from app.services.user_services import get_user_by_email
 from sqlalchemy.exc import SQLAlchemyError
 
