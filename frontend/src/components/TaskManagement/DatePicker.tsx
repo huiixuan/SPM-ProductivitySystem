@@ -31,7 +31,7 @@ type DatePickerProps = {
   onChange?: (date: Date | undefined) => void
 }
 
-export function DatePicker({ date, onChange }: DatePickerProps) {
+export default function DatePicker({ date, onChange }: DatePickerProps) {
     const today = new Date()
     const [open, setOpen] = useState(false)
     const [month, setMonth] = useState<Date | undefined>(date)

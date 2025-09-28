@@ -1,6 +1,10 @@
+import { useState } from "react"
+import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
 import { z } from "zod"
-import { EmailCombobox } from "@/components/TaskManagement/EmailCombobox"
+import EmailCombobox from "@/components/TaskManagement/EmailCombobox"
+import DatePicker from "@/components/TaskManagement/DatePicker"
+import UploadAttachments from "@/components/TaskManagement/UploadAttachments"
 import {
   Form,
   FormControl,
@@ -8,7 +12,6 @@ import {
   FormItem,
   FormLabel,
 } from "@/components/ui/form"
-import { DatePicker } from "@/components/TaskManagement/DatePicker"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -29,6 +32,7 @@ import {
   SelectTrigger,
   SelectValue
 } from "@/components/ui/select"
+import { toast } from "sonner"
 import { Plus } from "lucide-react"
 
 const formSchema = z.object({
@@ -37,28 +41,82 @@ const formSchema = z.object({
   duedate: z.date(),
   status: z.string().min(1, "Select a status."),
   owner: z.string().min(1, "Task owner is required."),
-  collaborators: z.array(z.string()).optional,
+  collaborators: z.array(z.string()),
   notes: z.string().optional(),
-  attachments: z.array(z.instanceof(File)).optional().default([])
+  attachments: z.array(z.instanceof(File))
 })
 type TaskFormData = z.infer<typeof formSchema>
 
 export function TaskCreation() {
+  const [open, setOpen] = useState<boolean>(false)
   const statuses = ["Unassigned", "Ongoing", "Pending Review", "Completed"]
 
-  const form = useForm<TaskFormData>()
+  const form = useForm<TaskFormData>({
+    resolver: zodResolver(formSchema),
+    defaultValues: {
+      title: "",
+      description: "",
+      status: "",
+      owner: "",
+      collaborators: [],
+      notes: "",
+      attachments: []
+    }
+  })
 
-  function onSubmit(values: z.infer<typeof formSchema>) {
-    
+  async function onSubmit(values: TaskFormData) {
+    const formData = new FormData()
+
+    formData.append("title", values.title)
+
+    if (values.description) {
+      formData.append("description", values.description)
+    }
+
+    formData.append("duedate", values.duedate.toISOString())
+    formData.append("status", values.status)
+    formData.append("owner", values.owner)
+
+    if (values.notes) {
+      formData.append("notes", values.notes)
+    }
+
+    values.collaborators.forEach((c) => {
+      formData.append("collaborators", c)
+    })
+
+    values.attachments.forEach((file) => {
+      formData.append("attachments", file)
+    })
+
+    try {
+      const res = await fetch("/api/task/save-task", {
+        method: "POST",
+        body: formData
+      })
+
+      const data = await res.json()
+
+      if (res.ok && data.success) {
+        toast.success("Task created successfully.")
+        form.reset()
+        setOpen(false)
+      } else {
+        toast.error("Task creation failed.")
+      }
+
+    } catch (error) {
+      toast.error("Task creation failed: " + error)
+    }
   }
 
   return (
-    <Dialog>
+    <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button variant="outline"><Plus /> New Task</Button>
       </DialogTrigger>
 
-      <DialogContent className="sm:max-w-[625px]">
+      <DialogContent className="sm:max-w-[825px]">
         <DialogHeader>
           <DialogTitle>Add New Task</DialogTitle>
           <DialogDescription>
@@ -82,7 +140,7 @@ export function TaskCreation() {
                 <FormItem>
                   <FormLabel>Description</FormLabel>
                   <FormControl>
-                    <Textarea defaultValue="" {...field} />
+                    <Textarea {...field} />
                   </FormControl>
                 </FormItem>
               )} />
@@ -108,7 +166,7 @@ export function TaskCreation() {
 
                         <SelectContent>
                           {statuses.map(status => (
-                            <SelectItem value={status}>{status}</SelectItem>
+                            <SelectItem key={status} value={status}>{status}</SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
@@ -139,20 +197,30 @@ export function TaskCreation() {
                 <FormItem>
                   <FormLabel>Notes</FormLabel>
                   <FormControl>
-                    <Textarea defaultValue="" {...field} />
+                    <Textarea {...field} />
+                  </FormControl>
+                </FormItem>
+              )} />
+
+              <FormField control={form.control} name="attachments" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Attachments</FormLabel>
+                  <FormControl>
+                    <UploadAttachments value={field.value} onChange={field.onChange} />
                   </FormControl>
                 </FormItem>
               )} />
             </div>
+
+            <DialogFooter>
+              <DialogClose asChild>
+                <Button variant="outline">Cancel</Button>
+              </DialogClose>
+
+              <Button type="submit">Create Task</Button>
+            </DialogFooter>
           </form>
         </Form>
-        
-        <DialogFooter>
-          <DialogClose asChild>
-            <Button variant="outline">Cancel</Button>
-          </DialogClose>
-          <Button type="submit">Save changes</Button>
-        </DialogFooter>
       </DialogContent>
     </Dialog>
   )

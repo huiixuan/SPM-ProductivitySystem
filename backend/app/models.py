@@ -71,7 +71,8 @@ class Attachment(db.Model):
     __tablename__ = "attachments"
 
     id = db.Column(db.Integer, primary_key=True)
-    file_path = db.Column(db.String(500), nullable=False)
+    filename = db.Column(db.String(255), nullable=False)
+    content = db.Column(db.LargeBinary, nullable=False)
 
     task_id = db.Column(db.Integer, db.ForeignKey("tasks.id"), nullable=False)
     task = relationship("Task", back_populates="attachments")

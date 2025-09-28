@@ -7,13 +7,12 @@ from .routes.auth import auth_bp
 from .routes.user import user_bp
 from .routes.task import task_bp
 
-
 migrate = Migrate()
 
 def create_app():
     app = Flask(__name__)
     app.config.from_object("config.Config")
-    CORS(app) 
+    CORS(app, origins=["http://localhost:5173"])
 
     db.init_app(app)
     migrate.init_app(app, db)

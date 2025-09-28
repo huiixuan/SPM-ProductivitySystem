@@ -22,7 +22,7 @@ type OwnerSelectionProps = {
   multiple?: boolean
 }
 
-export function EmailCombobox({ value, onChange, placeholder = "Select email...", multiple = false }: OwnerSelectionProps) {
+export default function EmailCombobox({ value, onChange, placeholder = "Select email...", multiple = false }: OwnerSelectionProps) {
   const [open, setOpen] = useState<boolean>(false)
   const [selected, setSelected] = useState<string[]>(Array.isArray(value) ? value : value ? [value] : [])
   const [users, setUsers] = useState<string[]>([]) 
@@ -83,9 +83,9 @@ export function EmailCombobox({ value, onChange, placeholder = "Select email..."
                 {selected.map(email => (
                   <Badge key={email} variant="outline" className="py-1 px-2">
                     {email}
-                    <button type="button" onClick={(e) => {handleCancelEmail(email, e)}}>
+                    <span role="button" tabIndex={0} onClick={(e) => {handleCancelEmail(email, e)}} className="cursor-pointer">
                       <X />
-                    </button>
+                    </span>
                     
                   </Badge>
                 ))}
