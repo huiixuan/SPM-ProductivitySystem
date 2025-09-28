@@ -53,6 +53,7 @@ export function TaskCreation() {
 
   const form = useForm<TaskFormData>({
     resolver: zodResolver(formSchema),
+    mode: "onChange",
     defaultValues: {
       title: "",
       description: "",
@@ -111,7 +112,14 @@ export function TaskCreation() {
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog 
+      open={open} 
+      onOpenChange={(isOpen) => {
+        if (!isOpen) {
+          form.reset()
+        }
+        setOpen(isOpen)
+    }}>
       <DialogTrigger asChild>
         <Button variant="outline"><Plus /> New Task</Button>
       </DialogTrigger>
@@ -127,12 +135,16 @@ export function TaskCreation() {
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)}>
             <div className="flex flex-col gap-4">
-              <FormField control={form.control} name="title" render={({ field }) => (
+              <FormField control={form.control} name="title" render={({ field, fieldState }) => (
                 <FormItem>
                   <FormLabel>Title</FormLabel>
                   <FormControl>
                     <Input {...field} />
                   </FormControl>
+
+                  {fieldState.error && (
+                    <p className="text-red-700">{fieldState.error.message}</p>
+                  )}
                 </FormItem>
               )} />
 
@@ -146,16 +158,20 @@ export function TaskCreation() {
               )} />
 
               <div className="flex flex-row gap-2">
-                <FormField control={form.control} name="duedate" render={({ field }) => (
+                <FormField control={form.control} name="duedate" render={({ field, fieldState }) => (
                   <FormItem className="w-1/2">
                     <FormLabel>Due Date</FormLabel>
                     <FormControl>
                       <DatePicker date={field.value} onChange={field.onChange} />
                     </FormControl>
+
+                    {fieldState.error && (
+                      <p className="text-red-700">{fieldState.error.message}</p>
+                    )}
                   </FormItem>
                 )} />
 
-                <FormField control={form.control} name="status" render={({ field }) => (
+                <FormField control={form.control} name="status" render={({ field, fieldState }) => (
                   <FormItem className="w-1/2">
                     <FormLabel>Status</FormLabel>
                     <FormControl>
@@ -171,16 +187,24 @@ export function TaskCreation() {
                         </SelectContent>
                       </Select>
                     </FormControl>
+
+                    {fieldState.error && (
+                      <p className="text-red-700">{fieldState.error.message}</p>
+                    )}
                   </FormItem>
                 )} />
               </div>
 
-              <FormField control={form.control} name="owner" render={({ field }) => (
+              <FormField control={form.control} name="owner" render={({ field, fieldState }) => (
                 <FormItem>
                   <FormLabel>Task Owner</FormLabel>
                   <FormControl>
                     <EmailCombobox value={field.value} onChange={field.onChange} placeholder="Select Task Owner..." />
                   </FormControl>
+
+                  {fieldState.error && (
+                    <p className="text-red-700">{fieldState.error.message}</p>
+                  )}
                 </FormItem>
               )} />
 
@@ -217,7 +241,7 @@ export function TaskCreation() {
                 <Button variant="outline">Cancel</Button>
               </DialogClose>
 
-              <Button type="submit">Create Task</Button>
+              <Button type="submit" disabled={!form.formState.isValid}>Create Task</Button>
             </DialogFooter>
           </form>
         </Form>
