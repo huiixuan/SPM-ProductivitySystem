@@ -2,7 +2,7 @@ from app.models import db, Task, Attachment
 from app.services.user_services import get_user_by_email
 from sqlalchemy.exc import SQLAlchemyError
 
-def save_task(title, description, duedate, status, owner_email, collaborator_emails, attachments, notes):
+def create_task(title, description, duedate, status, owner_email, collaborator_emails, attachments, notes):
     try:
         owner = get_user_by_email(owner_email)
         if not owner:
@@ -29,4 +29,16 @@ def save_task(title, description, duedate, status, owner_email, collaborator_ema
     
     except SQLAlchemyError as e:
         db.session.rollback()
-        raise e
+        raise RuntimeError(f"Database error while saving task: {e}")
+
+def get_task(task_id):
+    try:
+        task = Task.query.get(task_id)
+        if not task:
+            raise ValueError(f"Task with task ID {task_id} not found")
+        
+        return task
+    
+    except SQLAlchemyError as e:
+        db.session.rollback()
+        raise RuntimeError(f"Database error while retrieving task {task_id}: {e}")

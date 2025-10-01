@@ -6,8 +6,8 @@ from sqlalchemy.exc import SQLAlchemyError
 
 task_bp = Blueprint("task", __name__)
 
-@task_bp.route("/save-task", methods=["POST"])
-def save_task_route():
+@task_bp.route("/create-task", methods=["POST"])
+def create_task_route():
     data = request.form
     files = request.files.getlist("attachments")
     print("data:", data)
@@ -23,12 +23,11 @@ def save_task_route():
         owner_email = data.get("owner")
         collaborators = data.getlist("collaborators")
         notes = data.get("notes")
-        # attachments = request.files.getlist("attachments") if "attachments" in request.files else []
 
         status_enum = TaskStatus(status)
         duedate = datetime.fromisoformat(duedate_str).date() if duedate_str else None
 
-        task = task_services.save_task(
+        task = task_services.create_task(
             title=title,
             description=description,
             duedate=duedate,
@@ -54,4 +53,14 @@ def save_task_route():
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 
+@task_bp.route("/get-task/<int:task_id>", methods=["GET"])
+def get_task_route(task_id):
+    try:
+        task = task_services.get_task(task_id)
+        if not task:
+            return jsonify({"error": "Task not found."}), 404
+        
+        return jsonify(task.to_dict()), 200
     
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500

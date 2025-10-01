@@ -47,7 +47,7 @@ const formSchema = z.object({
 })
 type TaskFormData = z.infer<typeof formSchema>
 
-export function TaskCreation() {
+export default function TaskCreation() {
   const [open, setOpen] = useState<boolean>(false)
   const statuses = ["Unassigned", "Ongoing", "Pending Review", "Completed"]
 
@@ -91,7 +91,7 @@ export function TaskCreation() {
     })
 
     try {
-      const res = await fetch("/api/task/save-task", {
+      const res = await fetch("/api/task/create-task", {
         method: "POST",
         body: formData
       })
