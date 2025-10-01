@@ -1,107 +1,107 @@
 ﻿import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { TaskCreation } from "@/components/TaskManagement/TaskCreation";
+import NewProjectButton from "@/components/Project/NewProjectButton";
+import ProjectList from "@/components/Project/ProjectList";
 
 export default function HomePage() {
-	const [dashboard, setDashboard] = useState("");
-	const navigate = useNavigate();
+  const [dashboard, setDashboard] = useState("");
+  const [role, setRole] = useState<string>("");
+  const [refreshKey, setRefreshKey] = useState(0);
+  const navigate = useNavigate();
 
-	useEffect(() => {
-		const token = localStorage.getItem("token");
-		const rememberMe = localStorage.getItem("rememberMe");
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    const rememberMe = localStorage.getItem("rememberMe");
+    if (!token) {
+      if (rememberMe === "true") {
+        alert("Your session has expired. Please login again.");
+        localStorage.removeItem("rememberMe");
+        localStorage.removeItem("rememberedEmail");
+      }
+      navigate("/");
+      return;
+    }
 
-		// If no token and not remembered, redirect to login
-		if (!token) {
-			// Check if user was previously remembered but token expired
-			if (rememberMe === "true") {
-				// User expected to stay logged in but token is missing/expired
-				alert("Your session has expired. Please login again.");
-				localStorage.removeItem("rememberMe");
-				localStorage.removeItem("rememberedEmail");
-			}
-			navigate("/");
-			return;
-		}
+    fetch("http://127.0.0.1:5000/auth/dashboard", {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then(async (res) => {
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          if (res.status === 401 || res.status === 422) {
+            localStorage.removeItem("token");
+            if (localStorage.getItem("rememberMe") === "true") {
+              alert("Your session has expired. Please login again.");
+            }
+            navigate("/");
+            return;
+          }
+          throw new Error(data.error || "Unauthorized");
+        }
+        return data;
+      })
+      .then((data) => {
+        if (!data) return;
+        const roleLower = (data.dashboard || "").toLowerCase();
+        setRole(roleLower);
+        if (roleLower === "staff") setDashboard("This is the Staff Dashboard");
+        else if (roleLower === "hr") setDashboard("This is the HR Dashboard");
+        else if (roleLower === "manager") setDashboard("This is the Manager Dashboard");
+        else if (roleLower === "director") setDashboard("This is the Director Dashboard");
+        else setDashboard("Unauthorized access");
+      })
+      .catch((err) => {
+        console.error("Dashboard error:", err);
+        setDashboard(err.message);
+      });
+  }, [navigate]);
 
-		fetch("http://127.0.0.1:5000/auth/dashboard", {
-			headers: { Authorization: `Bearer ${token}` },
-		})
-			.then(async (res) => {
-				const data = await res.json().catch(() => ({}));
-				if (!res.ok) {
-					// Token might be expired
-					if (res.status === 401 || res.status === 422) {
-						localStorage.removeItem("token");
-						if (localStorage.getItem("rememberMe") === "true") {
-							alert(
-								"Your session has expired. Please login again."
-							);
-						}
-						navigate("/");
-						return;
-					}
-					throw new Error(data.error || "Unauthorized");
-				}
-				return data;
-			})
-			.then((data) => {
-				if (!data) return; // Already handled redirect
+  const handleLogout = () => {
+    localStorage.removeItem("token");
+    localStorage.removeItem("rememberMe");
+    localStorage.removeItem("rememberedEmail");
+    alert("Logged out successfully!");
+    navigate("/");
+  };
 
-				const role = (data.dashboard || "").toLowerCase();
+  const canCreateProject = role === "manager" || role === "director";
 
-				if (role === "staff")
-					setDashboard("This is the Staff Dashboard");
-				else if (role === "hr")
-					setDashboard("This is the HR Dashboard");
-				else if (role === "manager")
-					setDashboard("This is the Manager Dashboard");
-				else if (role === "director")
-					setDashboard("This is the Director Dashboard");
-				else setDashboard("Unauthorized access");
-			})
-			.catch((err) => {
-				console.error("Dashboard error:", err);
-				setDashboard(err.message);
-			});
-	}, [navigate]);
+  return (
+    <div style={{ padding: "2rem" }}>
+      <h1>Dashboard</h1>
+      <p>{dashboard}</p>
 
-	const handleLogout = () => {
-		// Clear all authentication data
-		localStorage.removeItem("token");
-		localStorage.removeItem("rememberMe");
-		localStorage.removeItem("rememberedEmail");
-		alert("Logged out successfully!");
-		navigate("/");
-	};
+      {localStorage.getItem("rememberMe") === "true" && (
+        <p style={{ color: "green", fontStyle: "italic" }}>
+          ✓ You are staying logged in (1 week session)
+        </p>
+      )}
 
-	return (
-		<div style={{ padding: "2rem" }}>
-			<h1>Dashboard</h1>
-			<p>{dashboard}</p>
+      <div className="flex items-center gap-3 mb-4">
+        <TaskCreation />
+        <NewProjectButton
+          disabled={!canCreateProject}
+          onCreated={() => setRefreshKey((k) => k + 1)}
+        />
+      </div>
 
-			{/* Show remember me status */}
-			{localStorage.getItem("rememberMe") === "true" && (
-				<p style={{ color: "green", fontStyle: "italic" }}>
-					✓ You are staying logged in (1 week session)
-				</p>
-			)}
+      <ProjectList refreshKey={refreshKey} />
 
-			<TaskCreation />
-
-			<button
-				onClick={handleLogout}
-				style={{
-					marginTop: "1rem",
-					backgroundColor: "red",
-					color: "white",
-					padding: "0.5rem 1rem",
-					border: "none",
-					borderRadius: "4px",
-					cursor: "pointer",
-				}}
-			>
-				Logout
-			</button>
-		</div>
-	);
+      <button
+        onClick={handleLogout}
+        style={{
+          marginTop: "1rem",
+          backgroundColor: "red",
+          color: "white",
+          padding: "0.5rem 1rem",
+          border: "none",
+          borderRadius: "4px",
+          cursor: "pointer",
+        }}
+      >
+        Logout
+      </button>
+    </div>
+  );
 }
