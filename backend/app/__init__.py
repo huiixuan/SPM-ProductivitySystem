@@ -22,7 +22,10 @@ load_dotenv()
 def create_app():
     app = Flask(__name__)
     app.config.from_object("config.Config")
-    CORS(app, origins=["http://localhost:5173"])
+   
+    
+    CORS(app, resources={r"/auth/*": {"origins": "http://localhost:5173"},
+                         r"/api/*": {"origins": "http://localhost:5173"}})
 
     # JWT config
     app.config["JWT_SECRET_KEY"] = os.getenv("JWT_SECRET_KEY", "super-secret-key")  
