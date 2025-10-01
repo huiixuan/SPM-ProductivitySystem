@@ -2,7 +2,7 @@ from flask import Blueprint, request, jsonify
 from app.models import db, User
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity, get_jwt
 from datetime import datetime, timedelta
-from app.services.user_service import create_user, validate_login, get_user_by_email
+from app.services.user_services import create_user, validate_login, get_user_by_email
 
 auth_bp = Blueprint("auth", __name__)
 
@@ -133,8 +133,16 @@ def dashboard():
         if not user:
             return jsonify({"error": "User not found"}), 404
             
-        role = user.role.lower()
+        role = user.role.value.lower()
         print(f"Debug: User {email}, Role: {role}")  # This will help debug
+
+        
+        dashboards = {
+            "manager": "Manager",
+            "hr": "HR",
+            "director": "Director",
+            "staff": "Staff",
+        }
 
         if role == "manager":
             return jsonify({"dashboard": "Manager"}), 200

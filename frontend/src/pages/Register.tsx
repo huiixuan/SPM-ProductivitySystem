@@ -81,7 +81,7 @@ export default function Register() {
 						<div>
 							<p className="mb-2 font-medium">I am a:</p>
 							<div className="flex justify-between">
-								{["Staff", "Manager", "Director", "HR"].map(
+								{["STAFF", "MANAGER", "DIRECTOR", "HR"].map(
 									(r) => (
 										<Button
 											key={r}
@@ -99,11 +99,14 @@ export default function Register() {
 							</div>
 						</div>
 
-						{/* name */}
-						<div>
+						{/* Name */}
+						<div style={{ marginBottom: "1rem" }}>
 							<label
 								htmlFor="name"
-								className="block text-sm font-medium mb-1"
+								style={{
+									display: "block",
+									marginBottom: "0.5rem",
+								}}
 							>
 								Name
 							</label>
@@ -112,7 +115,13 @@ export default function Register() {
 								type="text"
 								value={name}
 								onChange={(e) => setName(e.target.value)}
-								className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring focus:ring-blue-500"
+								required
+								style={{
+									width: "100%",
+									padding: "0.5rem",
+									border: "1px solid #ccc",
+									borderRadius: "4px",
+								}}
 							/>
 						</div>
 

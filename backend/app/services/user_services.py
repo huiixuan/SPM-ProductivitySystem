@@ -1,4 +1,6 @@
 from app.models import db, User
+from flask import jsonify 
+from sqlalchemy.exc import SQLAlchemyError
 
 def create_user(name, email, role, password):
     """Create and save a new user"""
@@ -18,3 +20,11 @@ def validate_login(email, password):
     if user and user.check_password(password):
         return user
     return None
+
+def get_all_emails():
+    try:
+        users_email = User.query.with_entities(User.email).all()
+        return [email for (email,) in users_email]
+    
+    except SQLAlchemyError as e:
+        return jsonify({"error": "Database error", "message": "Unable to fetch users."})

@@ -1,5 +1,13 @@
 import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { Button } from "../components/ui/button";
+import {
+	Card,
+	CardHeader,
+	CardTitle,
+	CardContent,
+	CardFooter,
+} from "../components/ui/card";
 
 export default function Login() {
 	const [email, setEmail] = useState("");
@@ -7,6 +15,7 @@ export default function Login() {
 	const [rememberMe, setRememberMe] = useState(false);
 	const [error, setError] = useState("");
 	const navigate = useNavigate();
+	const isValid = Boolean(email.trim() && password.trim()); // for button enable/disable
 
 	// Load saved credentials when the page loads
 	useEffect(() => {
@@ -52,7 +61,7 @@ export default function Login() {
 				alert("Login successful!");
 				navigate("/HomePage");
 			} else {
-				setError(data.error || "Invalid email or password");
+				setError(data.error || "Invalid username or password");
 			}
 		} catch (err) {
 			console.error("Login error:", err);
@@ -61,148 +70,97 @@ export default function Login() {
 	};
 
 	return (
-		<div
-			style={{
-				display: "flex",
-				justifyContent: "center",
-				alignItems: "center",
-				height: "100vh",
-				width: "100vw",
-				backgroundColor: "#f3f4f6",
-			}}
-		>
-			<form
-				onSubmit={handleSubmit}
-				style={{
-					background: "white",
-					padding: "2rem",
-					borderRadius: "8px",
-					boxShadow: "0 4px 6px rgba(0,0,0,0.1)",
-					width: "100%",
-					maxWidth: "400px",
-				}}
-			>
-				<h1
-					style={{
-						textAlign: "center",
-						fontSize: "2rem",
-						fontWeight: "bold",
-						marginBottom: "1.5rem",
-					}}
-				>
-					Login
-				</h1>
+		<div className="fixed inset-0 grid place-items-center">
+			<Card className="w-full max-w-sm mx-4">
+				<CardHeader>
+					<CardTitle className="text-center text-2xl">
+						Login
+					</CardTitle>
+				</CardHeader>
 
-				{error && (
-					<p
-						style={{
-							color: "red",
-							fontSize: "0.9rem",
-							marginBottom: "1rem",
-						}}
-					>
-						{error}
+				<CardContent>
+					{error && (
+						<p className="text-red-500 text-sm mb-4">{error}</p>
+					)}
+
+					<form onSubmit={handleSubmit} className="space-y-4">
+						{/* Email */}
+						<div>
+							<label
+								htmlFor="email"
+								className="block text-sm font-medium mb-1"
+							>
+								Email
+							</label>
+							<input
+								id="email"
+								type="email"
+								value={email}
+								onChange={(e) => setEmail(e.target.value)}
+								className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring focus:ring-blue-500"
+							/>
+						</div>
+
+						{/* Password */}
+						<div>
+							<label
+								htmlFor="password"
+								className="block text-sm font-medium mb-1"
+							>
+								Password
+							</label>
+							<input
+								id="password"
+								type="password"
+								value={password}
+								onChange={(e) => setPassword(e.target.value)}
+								className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring focus:ring-blue-500"
+							/>
+						</div>
+
+						{/* Remember me + Forgot password */}
+						<div className="flex items-center justify-between">
+							<label className="flex items-center text-sm">
+								<input
+									type="checkbox"
+									checked={rememberMe}
+									onChange={(e) =>
+										setRememberMe(e.target.checked)
+									}
+									className="mr-2"
+								/>
+								Remember me
+							</label>
+							<Link
+								to="/forgot-password"
+								className="text-sm text-blue-500 hover:underline"
+							>
+								Forgot Password?
+							</Link>
+						</div>
+
+						<Button
+							type="submit"
+							disabled={!isValid}
+							className={`w-full ${isValid ? "font-bold " : ""}`}
+						>
+							Login
+						</Button>
+					</form>
+				</CardContent>
+
+				<CardFooter className="flex justify-center">
+					<p className="text-sm">
+						Don’t have an account?{" "}
+						<Link
+							to="/register"
+							className="text-blue-500 hover:underline"
+						>
+							Register
+						</Link>
 					</p>
-				)}
-
-				<div style={{ marginBottom: "1rem" }}>
-					<label
-						htmlFor="email"
-						style={{ display: "block", marginBottom: "0.5rem" }}
-					>
-						Email
-					</label>
-					<input
-						id="email"
-						type="text"
-						value={email}
-						onChange={(e) => setEmail(e.target.value)}
-						required
-						style={{
-							width: "100%",
-							padding: "0.5rem",
-							border: "1px solid #ccc",
-							borderRadius: "4px",
-						}}
-					/>
-				</div>
-
-				<div style={{ marginBottom: "1rem" }}>
-					<label
-						htmlFor="password"
-						style={{ display: "block", marginBottom: "0.5rem" }}
-					>
-						Password
-					</label>
-					<input
-						id="password"
-						type="password"
-						value={password}
-						onChange={(e) => setPassword(e.target.value)}
-						required
-						style={{
-							width: "100%",
-							padding: "0.5rem",
-							border: "1px solid #ccc",
-							borderRadius: "4px",
-						}}
-					/>
-				</div>
-
-				<div
-					style={{
-						display: "flex",
-						justifyContent: "space-between",
-						alignItems: "center",
-						marginBottom: "1rem",
-					}}
-				>
-					<label style={{ fontSize: "0.9rem" }}>
-						<input
-							type="checkbox"
-							checked={rememberMe}
-							onChange={(e) => setRememberMe(e.target.checked)}
-							style={{ marginRight: "0.5rem" }}
-						/>
-						Remember me
-					</label>
-					<Link
-						to="/forgot-password"
-						style={{ fontSize: "0.9rem", color: "#2563eb" }}
-					>
-						Forgot Password?
-					</Link>
-				</div>
-
-				<button
-					type="submit"
-					style={{
-						width: "100%",
-						backgroundColor: "#2563eb",
-						color: "white",
-						padding: "0.75rem",
-						border: "none",
-						borderRadius: "4px",
-						cursor: "pointer",
-						fontWeight: "bold",
-					}}
-				>
-					Login
-				</button>
-
-				<p
-					style={{
-						textAlign: "center",
-						marginTop: "1rem",
-						fontSize: "0.9rem",
-					}}
-				>
-					Don't have an account?{" "}
-					<Link to="/register" style={{ color: "#2563eb" }}>
-						Register
-					</Link>
-				</p>
-			</form>
+				</CardFooter>
+			</Card>
 		</div>
 	);
 }

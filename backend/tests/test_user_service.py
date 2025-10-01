@@ -1,7 +1,7 @@
 import pytest
 from app import create_app
 from app.models import db, User
-from app.services.user_service import create_user, get_user_by_email, validate_login
+from app.services.user_services import create_user, get_user_by_email, validate_login
 
 @pytest.fixture
 def app():
@@ -19,12 +19,10 @@ def app():
         db.session.remove()
         db.drop_all()
 
-
 @pytest.fixture
 def client(app):
     """For later use in tests."""
     return app.test_client()
-
 
 def test_create_and_get_user(app):
     """Create a user and fetch them."""
@@ -38,7 +36,6 @@ def test_create_and_get_user(app):
         assert user.role == "manager"
         assert user.check_password("password123") is True
 
-
 def test_validate_login_success(app):
     """Validate correct login credentials."""
     with app.app_context():
@@ -46,7 +43,6 @@ def test_validate_login_success(app):
         user = validate_login("bob@example.com", "secret")
         assert user is not None
         assert user.email == "bob@example.com"
-
 
 def test_validate_login_failure(app):
     """Validate wrong credentials fail."""

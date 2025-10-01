@@ -1,5 +1,6 @@
 ﻿import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { TaskCreation } from "@/components/TaskManagement/TaskCreation";
 
 export default function HomePage() {
 	const [dashboard, setDashboard] = useState("");
@@ -84,6 +85,8 @@ export default function HomePage() {
 					✓ You are staying logged in (1 week session)
 				</p>
 			)}
+
+			<TaskCreation />
 
 			<button
 				onClick={handleLogout}
