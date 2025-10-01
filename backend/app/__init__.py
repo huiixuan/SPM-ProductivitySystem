@@ -21,6 +21,7 @@ load_dotenv()
 def create_app():
     app = Flask(__name__)
     app.config.from_object("config.Config")
+    CORS(app, origins=["http://localhost:5173"])
 
     # uploads (for project PDF attachments)
     app.config["UPLOAD_FOLDER"] = os.getenv("UPLOAD_FOLDER", "uploads")

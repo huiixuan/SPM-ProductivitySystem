@@ -2,7 +2,7 @@ from flask import Blueprint, request, jsonify
 from app.models import db, User
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
 from datetime import datetime, timedelta
-from app.services.user_services import create_user
+from app.services.user_services import create_user, validate_login, get_user_by_email
 
 # The blueprint for authentication routes
 auth_bp = Blueprint("auth", __name__)
