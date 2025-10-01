@@ -18,10 +18,22 @@ class TaskStatus(enum.Enum):
     PENDING_REVIEW = "Pending Review"
     COMPLETED = "Completed"
 
+class ProjectStatus(enum.Enum):
+    NOT_STARTED = "Not Started"
+    IN_PROGRESS = "In Progress"
+    COMPLETED = "Completed"
+
+# association tables
 task_collaborators = db.Table(
     "task_collaborators",
     db.Column("task_id", db.Integer, db.ForeignKey("tasks.id"), primary_key=True),
-    db.Column("user_id", db.Integer, db.ForeignKey("users.id"), primary_key=True)
+    db.Column("user_id", db.Integer, db.ForeignKey("users.id"), primary_key=True),
+)
+
+project_collaborators = db.Table(
+    "project_collaborators",
+    db.Column("project_id", db.Integer, db.ForeignKey("projects.id"), primary_key=True),
+    db.Column("user_id", db.Integer, db.ForeignKey("users.id"), primary_key=True),
 )
 
 class User(db.Model):
@@ -33,11 +45,12 @@ class User(db.Model):
     email = db.Column(db.String(100), unique=True, nullable=False)
     password_hash = db.Column(db.String(512), nullable=False)
 
+    # relationships
     owned_tasks = relationship("Task", back_populates="owner")
+    tasks = relationship("Task", secondary=task_collaborators, back_populates="collaborators")
 
-    tasks = relationship(
-        "Task", secondary=task_collaborators, back_populates="collaborators"
-    )
+    owned_projects = relationship("Project", back_populates="owner")
+    projects = relationship("Project", secondary=project_collaborators, back_populates="collaborators")
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
@@ -58,14 +71,8 @@ class Task(db.Model):
     owner_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
 
     owner = relationship("User", back_populates="owned_tasks")
-
-    collaborators = relationship(
-        "User", secondary=task_collaborators, back_populates="tasks"
-    )
-
-    attachments = relationship(
-        "Attachment", back_populates="task", cascade="all, delete-orphan"
-    )
+    collaborators = relationship("User", secondary=task_collaborators, back_populates="tasks")
+    attachments = relationship("Attachment", back_populates="task", cascade="all, delete-orphan")
 
 class Attachment(db.Model):
     __tablename__ = "attachments"
@@ -76,3 +83,37 @@ class Attachment(db.Model):
 
     task_id = db.Column(db.Integer, db.ForeignKey("tasks.id"), nullable=False)
     task = relationship("Task", back_populates="attachments")
+
+class Project(db.Model):
+    __tablename__ = "projects"
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(160), nullable=False)
+    description = db.Column(db.Text)
+    deadline = db.Column(db.Date)
+    status = db.Column(db.Enum(ProjectStatus, native_enum=False), default=ProjectStatus.NOT_STARTED)
+    attachment_path = db.Column(db.String(255))
+
+    owner_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    owner = relationship("User", back_populates="owned_projects")
+
+    collaborators = relationship(
+        "User",
+        secondary=project_collaborators,
+        back_populates="projects",
+    )
+
+    created_at = db.Column(db.DateTime(timezone=True), server_default=func.now())
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "name": self.name,
+            "description": self.description,
+            "deadline": self.deadline.isoformat() if self.deadline else None,
+            "status": self.status.value if self.status else None,
+            "attachment_path": self.attachment_path,
+            "owner_id": self.owner_id,
+            "collaborators": [c.email for c in self.collaborators],
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
