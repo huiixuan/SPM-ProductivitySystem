@@ -86,6 +86,18 @@ class Task(db.Model):
         "Attachment", back_populates="task", cascade="all, delete-orphan"
     )
 
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "title": self.title,
+            "description": self.description,
+            "duedate": self.duedate.isoformat() if self.duedate else None,
+            "status": self.status.value if self.status else None,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "notes": self.notes,
+            "owner_id": self.owner_id,
+        }
+    
 class Attachment(db.Model):
     __tablename__ = "attachments"
 
