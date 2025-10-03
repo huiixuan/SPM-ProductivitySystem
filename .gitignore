@@ -11,6 +11,3 @@ __pycache__/
 
 # Visual studio cache
 .vs/
-
-# Ignore migration folder
-/backend/migrations
