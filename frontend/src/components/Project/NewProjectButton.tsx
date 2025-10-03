@@ -1,6 +1,3 @@
-"use client";
-
-import * as React from "react";
 import { useState } from "react";
 import { z } from "zod";
 import { toast } from "sonner";
