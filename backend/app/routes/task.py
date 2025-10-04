@@ -3,6 +3,7 @@ from app.services import task_services
 from app.models import TaskStatus
 from datetime import datetime
 from sqlalchemy.exc import SQLAlchemyError
+import traceback
 
 task_bp = Blueprint("task", __name__)
 
@@ -51,7 +52,10 @@ def create_task_route():
         return jsonify({"success": False, "error": str(se)}), 500
     
     except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
+        print("--- AN ERROR OCCURRED ---")
+        traceback.print_exc() # This will print the full error traceback
+        print("--------------------------")
+        return jsonify({"error": "An internal error occurred"}), 500
 
 @task_bp.route("/get-task/<int:task_id>", methods=["GET"])
 def get_task_route(task_id):
