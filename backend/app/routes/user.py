@@ -5,5 +5,9 @@ user_bp = Blueprint("user", __name__)
 
 @user_bp.route("/get-all-emails", methods=["GET"])
 def get_all_emails_route():
-    emails = get_all_emails()
-    return jsonify(emails)
+    try:
+        emails = get_all_emails() or []
+        return jsonify(emails)
+    
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500

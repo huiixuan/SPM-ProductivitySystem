@@ -52,8 +52,6 @@ class User(db.Model):
     owned_projects = relationship("Project", back_populates="owner")
     projects = relationship("Project", secondary=project_collaborators, back_populates="collaborators")
 
-    owned_tasks = relationship("Task", back_populates="owner")
-
     tasks = relationship(
         "Task", secondary=task_collaborators, back_populates="collaborators"
     )
@@ -75,8 +73,10 @@ class Task(db.Model):
     created_at = db.Column(db.DateTime(timezone=True), server_default=func.now())
     notes = db.Column(db.String(500), nullable=True)
     owner_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    project_id = db.Column(db.Integer, db.ForeignKey("projects.id"), nullable=True)
 
     owner = relationship("User", back_populates="owned_tasks")
+    project = relationship("Project", back_populates="project_tasks")
 
     collaborators = relationship(
         "User", secondary=task_collaborators, back_populates="tasks"
@@ -86,6 +86,19 @@ class Task(db.Model):
         "Attachment", back_populates="task", cascade="all, delete-orphan"
     )
 
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "title": self.title,
+            "description": self.description,
+            "duedate": self.duedate.isoformat() if self.duedate else None,
+            "status": self.status.value if self.status else None,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "notes": self.notes,
+            "owner_email": self.owner.email if self.owner else None,
+            "project": self.project.name if self.project else None
+        }
+    
 class Attachment(db.Model):
     __tablename__ = "attachments"
 
@@ -108,6 +121,8 @@ class Project(db.Model):
 
     owner_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
     owner = relationship("User", back_populates="owned_projects")
+
+    project_tasks = relationship("Task", back_populates="project", cascade="all, delete-orphan")
 
     collaborators = relationship(
         "User",
