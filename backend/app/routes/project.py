@@ -120,7 +120,7 @@ def create_project():
 @jwt_required()
 def list_projects():
     try:
-        # ✅ CORRECT: Get user ID (string) from token and convert to integer
+        
         user_id_str = get_jwt_identity()
         user_id = int(user_id_str)
         user = db.session.get(User, user_id)
