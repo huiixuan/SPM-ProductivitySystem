@@ -2,7 +2,7 @@ from app.models import db, Task, Attachment
 from app.services.user_services import get_user_by_email
 from sqlalchemy.exc import SQLAlchemyError
 
-def create_task(title, description, duedate, status, owner_email, collaborator_emails, attachments, notes):
+def create_task(title, description, duedate, status, owner_email, collaborator_emails, attachments, notes, priority):
     try:
         owner = get_user_by_email(owner_email)
         if not owner:
@@ -15,7 +15,7 @@ def create_task(title, description, duedate, status, owner_email, collaborator_e
                 if user:
                     collaborators.append(user)
 
-        task = Task(title=title, description=description, duedate=duedate, status=status, owner=owner, collaborators=collaborators, notes=notes)
+        task = Task(title=title, description=description, duedate=duedate, status=status, owner=owner, collaborators=collaborators, notes=notes, priority=priority)
 
         if attachments:
             for file in attachments:

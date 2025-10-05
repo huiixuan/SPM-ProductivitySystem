@@ -3,6 +3,7 @@ from app.services import task_services
 from app.models import TaskStatus
 from datetime import datetime
 from sqlalchemy.exc import SQLAlchemyError
+import traceback
 
 task_bp = Blueprint("task", __name__)
 
@@ -23,6 +24,7 @@ def create_task_route():
         owner_email = data.get("owner")
         collaborators = data.getlist("collaborators")
         notes = data.get("notes")
+        priority = data.get("priority")
 
         status_enum = TaskStatus(status)
         duedate = datetime.fromisoformat(duedate_str).date() if duedate_str else None
@@ -35,7 +37,8 @@ def create_task_route():
             owner_email=owner_email,
             collaborator_emails=collaborators,
             attachments=files,
-            notes=notes
+            notes=notes,
+            priority=priority,
         )
 
         return jsonify({
@@ -51,7 +54,10 @@ def create_task_route():
         return jsonify({"success": False, "error": str(se)}), 500
     
     except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
+        print("--- AN ERROR OCCURRED ---")
+        traceback.print_exc() # This will print the full error traceback
+        print("--------------------------")
+        return jsonify({"error": "An internal error occurred"}), 500
 
 @task_bp.route("/get-task/<int:task_id>", methods=["GET"])
 def get_task_route(task_id):

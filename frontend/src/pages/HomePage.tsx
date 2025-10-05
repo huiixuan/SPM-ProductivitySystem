@@ -1,5 +1,6 @@
 ﻿import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+
 import TaskCreation from "@/components/TaskManagement/TaskCreation";
 import TaskInfoCard from "@/components/TaskManagement/TaskInfoCard";
 import NewProjectButton from "@/components/Project/NewProjectButton";
@@ -104,7 +105,7 @@ export default function HomePage() {
         Logout
       </button>
 
-      <TaskInfoCard task_id={6} />
+      <TaskInfoCard task_id={4} />
     </div>
   );
 }

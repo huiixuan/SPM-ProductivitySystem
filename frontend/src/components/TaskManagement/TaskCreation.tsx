@@ -35,11 +35,13 @@ import {
 import { toast } from "sonner"
 import { Plus } from "lucide-react"
 
+// 1. Add priority to the Zod schema
 const formSchema = z.object({
   title: z.string().min(1, "Title is required."),
   description: z.string().optional(),
   duedate: z.date(),
   status: z.string().min(1, "Select a status."),
+  priority: z.coerce.number().min(1, "Priority is required."),
   owner: z.string().min(1, "Task owner is required."),
   collaborators: z.array(z.string()),
   notes: z.string().optional(),
@@ -50,6 +52,8 @@ type TaskFormData = z.infer<typeof formSchema>
 export default function TaskCreation() {
   const [open, setOpen] = useState<boolean>(false)
   const statuses = ["Unassigned", "Ongoing", "Pending Review", "Completed"]
+  // 2. Create an array for priority levels
+  const priorities = Array.from({ length: 10 }, (_, i) => i + 1); // [1, 2, ..., 10]
 
   const form = useForm<TaskFormData>({
     resolver: zodResolver(formSchema),
@@ -61,7 +65,9 @@ export default function TaskCreation() {
       owner: "",
       collaborators: [],
       notes: "",
-      attachments: []
+      attachments: [],
+      // 3. Set a default priority
+      priority: 1,
     }
   })
 
@@ -76,6 +82,8 @@ export default function TaskCreation() {
 
     formData.append("duedate", values.duedate.toISOString())
     formData.append("status", values.status)
+    // 4. Append priority to the form data
+    formData.append("priority", values.priority.toString())
     formData.append("owner", values.owner)
 
     if (values.notes) {
@@ -141,10 +149,7 @@ export default function TaskCreation() {
                   <FormControl>
                     <Input {...field} />
                   </FormControl>
-
-                  {fieldState.error && (
-                    <p className="text-red-700">{fieldState.error.message}</p>
-                  )}
+                  {fieldState.error && (<p className="text-red-700">{fieldState.error.message}</p>)}
                 </FormItem>
               )} />
 
@@ -164,10 +169,7 @@ export default function TaskCreation() {
                     <FormControl>
                       <DatePicker date={field.value} onChange={field.onChange} />
                     </FormControl>
-
-                    {fieldState.error && (
-                      <p className="text-red-700">{fieldState.error.message}</p>
-                    )}
+                    {fieldState.error && (<p className="text-red-700">{fieldState.error.message}</p>)}
                   </FormItem>
                 )} />
 
@@ -179,7 +181,6 @@ export default function TaskCreation() {
                         <SelectTrigger className="w-full">
                           <SelectValue placeholder="Status" />
                         </SelectTrigger>
-
                         <SelectContent>
                           {statuses.map(status => (
                             <SelectItem key={status} value={status}>{status}</SelectItem>
@@ -187,26 +188,45 @@ export default function TaskCreation() {
                         </SelectContent>
                       </Select>
                     </FormControl>
-
-                    {fieldState.error && (
-                      <p className="text-red-700">{fieldState.error.message}</p>
-                    )}
+                    {fieldState.error && (<p className="text-red-700">{fieldState.error.message}</p>)}
                   </FormItem>
                 )} />
               </div>
 
-              <FormField control={form.control} name="owner" render={({ field, fieldState }) => (
-                <FormItem>
-                  <FormLabel>Task Owner</FormLabel>
+             
+            <div className="flex flex-row gap-2">
+              <FormField control={form.control} name="priority" render={({ field, fieldState }) => (
+                <FormItem className="w-1/2">
+                  <FormLabel>Priority</FormLabel>
                   <FormControl>
-                    <EmailCombobox value={field.value} onChange={field.onChange} placeholder="Select Task Owner..." />
+                    <Select onValueChange={(value) => field.onChange(parseInt(value, 10))} value={field.value?.toString()}>
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Priority" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {priorities.map(p => (
+                          <SelectItem key={p} value={p.toString()}>
+                            {p} {/* Changed from "Priority {p}" to just "{p}" */}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </FormControl>
-
-                  {fieldState.error && (
-                    <p className="text-red-700">{fieldState.error.message}</p>
-                  )}
+                  {fieldState.error && (<p className="text-red-700">{fieldState.error.message}</p>)}
                 </FormItem>
               )} />
+
+
+                <FormField control={form.control} name="owner" render={({ field, fieldState }) => (
+                  <FormItem className="w-1/2">
+                    <FormLabel>Task Owner</FormLabel>
+                    <FormControl>
+                      <EmailCombobox value={field.value} onChange={field.onChange} placeholder="Select Task Owner..." />
+                    </FormControl>
+                    {fieldState.error && (<p className="text-red-700">{fieldState.error.message}</p>)}
+                  </FormItem>
+                )} />
+              </div>
 
               <FormField control={form.control} name="collaborators" render={({ field }) => (
                 <FormItem>
@@ -240,7 +260,6 @@ export default function TaskCreation() {
               <DialogClose asChild>
                 <Button variant="outline">Cancel</Button>
               </DialogClose>
-
               <Button type="submit" disabled={!form.formState.isValid}>Create Task</Button>
             </DialogFooter>
           </form>
