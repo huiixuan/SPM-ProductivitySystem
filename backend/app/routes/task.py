@@ -24,6 +24,7 @@ def create_task_route():
         owner_email = data.get("owner")
         collaborators = data.getlist("collaborators")
         notes = data.get("notes")
+        priority = data.get("priority")
 
         status_enum = TaskStatus(status)
         duedate = datetime.fromisoformat(duedate_str).date() if duedate_str else None
@@ -36,7 +37,8 @@ def create_task_route():
             owner_email=owner_email,
             collaborator_emails=collaborators,
             attachments=files,
-            notes=notes
+            notes=notes,
+            priority=priority,
         )
 
         return jsonify({

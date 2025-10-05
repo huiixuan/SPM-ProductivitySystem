@@ -74,6 +74,7 @@ class Task(db.Model):
     notes = db.Column(db.String(500), nullable=True)
     owner_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
     project_id = db.Column(db.Integer, db.ForeignKey("projects.id"), nullable=True)
+    priority = db.Column(db.Integer, nullable=False, server_default='1', default=1)
 
     owner = relationship("User", back_populates="owned_tasks")
     project = relationship("Project", back_populates="project_tasks")
@@ -96,7 +97,8 @@ class Task(db.Model):
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "notes": self.notes,
             "owner_email": self.owner.email if self.owner else None,
-            "project": self.project.name if self.project else None
+            "project": self.project.name if self.project else None,
+            "priority": self.priority,
         }
     
 class Attachment(db.Model):
