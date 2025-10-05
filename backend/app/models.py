@@ -52,12 +52,6 @@ class User(db.Model):
     owned_projects = relationship("Project", back_populates="owner")
     projects = relationship("Project", secondary=project_collaborators, back_populates="collaborators")
 
-    owned_tasks = relationship("Task", back_populates="owner")
-
-    tasks = relationship(
-        "Task", secondary=task_collaborators, back_populates="collaborators"
-    )
-
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
 
@@ -74,10 +68,11 @@ class Task(db.Model):
     status = db.Column(db.Enum(TaskStatus, native_enum=False), nullable=False, default=TaskStatus.UNASSIGNED)
     created_at = db.Column(db.DateTime(timezone=True), server_default=func.now())
     notes = db.Column(db.String(500), nullable=True)
-    owner_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
-    project_id = db.Column(db.Integer, db.ForeignKey("projects.id"), nullable=True)
 
+    owner_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
     owner = relationship("User", back_populates="owned_tasks")
+
+    project_id = db.Column(db.Integer, db.ForeignKey("projects.id"), nullable=True)
     project = relationship("Project", back_populates="project_tasks")
 
     collaborators = relationship(
@@ -88,13 +83,8 @@ class Task(db.Model):
         "Attachment", back_populates="task", cascade="all, delete-orphan"
     )
 
-    collaborators = relationship(
-        "User", secondary=task_collaborators, back_populates="tasks"
-    )
-
-    attachments = relationship(
-        "Attachment", back_populates="task", cascade="all, delete-orphan"
-    )
+    parent_id = db.Column(db.Integer, db.ForeignKey("tasks.id"), nullable=True)
+    subtasks = relationship("Task", backref=db.backref("parent", remote_side=[id]), cascade="all, delete-orphan")
 
     def to_dict(self):
         return {

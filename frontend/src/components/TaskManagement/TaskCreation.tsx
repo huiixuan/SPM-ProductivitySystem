@@ -35,6 +35,16 @@ import {
 import { toast } from "sonner"
 import { Plus } from "lucide-react"
 
+interface UserData {
+  role: string,
+  email: string
+}
+
+type TaskCreationProps = {
+  buttonName: string,
+  currentUserData: UserData
+}
+
 const formSchema = z.object({
   title: z.string().min(1, "Title is required."),
   description: z.string().optional(),
@@ -47,7 +57,7 @@ const formSchema = z.object({
 })
 type TaskFormData = z.infer<typeof formSchema>
 
-export default function TaskCreation() {
+export default function TaskCreation({ buttonName, currentUserData }: TaskCreationProps) {
   const [open, setOpen] = useState<boolean>(false)
   const statuses = ["Unassigned", "Ongoing", "Pending Review", "Completed"]
 
@@ -93,6 +103,7 @@ export default function TaskCreation() {
     try {
       const res = await fetch("/api/task/create-task", {
         method: "POST",
+        credentials: "include",
         body: formData
       })
 
@@ -121,7 +132,7 @@ export default function TaskCreation() {
         setOpen(isOpen)
     }}>
       <DialogTrigger asChild>
-        <Button variant="outline"><Plus /> New Task</Button>
+        <Button variant="outline"><Plus /> {buttonName}</Button>
       </DialogTrigger>
 
       <DialogContent className="sm:max-w-[825px]">
@@ -199,7 +210,11 @@ export default function TaskCreation() {
                 <FormItem>
                   <FormLabel>Task Owner</FormLabel>
                   <FormControl>
-                    <EmailCombobox value={field.value} onChange={field.onChange} placeholder="Select Task Owner..." />
+                    {["manager", "director"].includes(currentUserData.role) ? (
+                        <EmailCombobox value={field.value} onChange={field.onChange} placeholder="Select Task Owner..." currentUserData={currentUserData} />
+                      ) : (
+                        <Input className="text-black" {...field} disabled />
+                      )}   
                   </FormControl>
 
                   {fieldState.error && (
@@ -212,7 +227,7 @@ export default function TaskCreation() {
                 <FormItem>
                   <FormLabel>Collaborators</FormLabel>
                   <FormControl>
-                    <EmailCombobox value={field.value as string[]} onChange={field.onChange} placeholder="Select Collaborators..." multiple />
+                    <EmailCombobox value={field.value as string[]} onChange={field.onChange} placeholder="Select Collaborators..." currentUserData={currentUserData} multiple />
                   </FormControl>
                 </FormItem>
               )} />

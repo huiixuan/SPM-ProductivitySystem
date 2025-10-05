@@ -3,6 +3,7 @@ from app.services import task_services
 from app.models import TaskStatus
 from datetime import datetime
 from sqlalchemy.exc import SQLAlchemyError
+from flask_jwt_extended import jwt_required, get_jwt_identity
 
 task_bp = Blueprint("task", __name__)
 

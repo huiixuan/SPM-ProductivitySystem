@@ -5,9 +5,14 @@ import TaskInfoCard from "@/components/TaskManagement/TaskInfoCard";
 import NewProjectButton from "@/components/Project/NewProjectButton";
 import ProjectList from "@/components/Project/ProjectList";
 
+interface UserData {
+  role: string,
+  email: string
+}
+
 export default function HomePage() {
   const [dashboard, setDashboard] = useState("");
-  const [role, setRole] = useState<string>("");
+  const [userData, setUserData] = useState<UserData>({ role: "", email: "" });
   const [refreshKey, setRefreshKey] = useState(0);
   const navigate = useNavigate();
 
@@ -44,8 +49,10 @@ export default function HomePage() {
       })
       .then((data) => {
         if (!data) return;
-        const roleLower = (data.dashboard || "").toLowerCase();
-        setRole(roleLower);
+
+        const roleLower = (data.role || "").toLowerCase();
+        setUserData(data);
+
         if (roleLower === "staff") setDashboard("This is the Staff Dashboard");
         else if (roleLower === "hr") setDashboard("This is the HR Dashboard");
         else if (roleLower === "manager") setDashboard("This is the Manager Dashboard");
@@ -66,7 +73,7 @@ export default function HomePage() {
     navigate("/");
   };
 
-  const canCreateProject = role === "manager" || role === "director";
+  const canCreateProject = userData.role === "manager" || userData.role === "director";
 
   return (
     <div style={{ padding: "2rem" }}>
@@ -80,7 +87,7 @@ export default function HomePage() {
       )}
 
       <div className="flex items-center gap-3 mb-4">
-        <TaskCreation />
+        <TaskCreation buttonName="New Task" currentUserData={userData} />
         <NewProjectButton
           disabled={!canCreateProject}
           onCreated={() => setRefreshKey((k) => k + 1)}
@@ -104,7 +111,7 @@ export default function HomePage() {
         Logout
       </button>
 
-      <TaskInfoCard task_id={6} />
+      {/* <TaskInfoCard task_id={6}  /> */}
     </div>
   );
 }

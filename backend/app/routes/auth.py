@@ -140,7 +140,8 @@ def dashboard():
             
         # Return the user's role for the dashboard
         role = user.role.value.lower()
-        return jsonify({"dashboard": role}), 200
+        email = user.email
+        return jsonify({"role": role, "email": email}), 200
 
     except (ValueError, TypeError):
         return jsonify({"error": "Invalid token identity"}), 401
