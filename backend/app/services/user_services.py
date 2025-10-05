@@ -21,10 +21,10 @@ def validate_login(email, password):
         return user
     return None
 
-def get_all_emails():
+def get_users_info():
     try:
-        users_email = User.query.with_entities(User.email).all()
-        return [email for (email,) in users_email]
+        users_data = User.query.with_entities(User.role, User.email).all()
+        return [{"role": role.value, "email": email} for role, email in users_data]
     
     except SQLAlchemyError as e:
         return jsonify({"error": "Database error", "message": "Unable to fetch users."})
