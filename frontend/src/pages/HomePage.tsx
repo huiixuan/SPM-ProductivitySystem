@@ -105,7 +105,7 @@ export default function HomePage() {
         Logout
       </button>
 
-      <TaskInfoCard task_id={6} />
+      <TaskInfoCard task_id={1} />
     </div>
   );
 }
