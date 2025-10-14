@@ -101,6 +101,14 @@ class Task(db.Model):
             "owner_email": self.owner.email if self.owner else None,
             "project": self.project.name if self.project else None,
             "priority": self.priority,
+            "collaborators": [
+                {"id": user.id, "email": user.email, "name": user.name}
+                for user in self.collaborators
+            ],
+            "attachments": [
+                {"id": att.id, "filename": att.filename}
+                for att in self.attachments
+            ]
         }
     
 class Attachment(db.Model):

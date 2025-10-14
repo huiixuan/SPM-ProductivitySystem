@@ -35,7 +35,6 @@ import {
 import { toast } from "sonner"
 import { Plus } from "lucide-react"
 
-// 1. Add priority to the Zod schema
 const formSchema = z.object({
   title: z.string().min(1, "Title is required."),
   description: z.string().optional(),
@@ -52,8 +51,7 @@ type TaskFormData = z.infer<typeof formSchema>
 export default function TaskCreation() {
   const [open, setOpen] = useState<boolean>(false)
   const statuses = ["Unassigned", "Ongoing", "Pending Review", "Completed"]
-  // 2. Create an array for priority levels
-  const priorities = Array.from({ length: 10 }, (_, i) => i + 1); // [1, 2, ..., 10]
+  const priorities = Array.from({ length: 10 }, (_, i) => i + 1)
 
   const form = useForm<TaskFormData>({
     resolver: zodResolver(formSchema),
@@ -66,8 +64,7 @@ export default function TaskCreation() {
       collaborators: [],
       notes: "",
       attachments: [],
-      // 3. Set a default priority
-      priority: 1,
+      priority: 1
     }
   })
 
@@ -82,7 +79,6 @@ export default function TaskCreation() {
 
     formData.append("duedate", values.duedate.toISOString())
     formData.append("status", values.status)
-    // 4. Append priority to the form data
     formData.append("priority", values.priority.toString())
     formData.append("owner", values.owner)
 

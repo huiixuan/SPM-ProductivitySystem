@@ -5,6 +5,7 @@ from datetime import datetime
 from sqlalchemy.exc import SQLAlchemyError
 import traceback
 from flask_jwt_extended import jwt_required, get_jwt_identity
+import json
 
 task_bp = Blueprint("task", __name__)
 
@@ -68,6 +69,25 @@ def get_task_route(task_id):
             return jsonify({"error": "Task not found."}), 404
         
         return jsonify(task.to_dict()), 200
+    
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@task_bp.route("/update-task/<int:task_id>", methods=["PUT"])
+def update_task_route(task_id):
+    try:
+        print("Update route called for task:", task_id)
+        print("Form data received:", request.form)
+        print("Files received:", request.files)
+
+        data = dict(request.form)
+        new_files = request.files.getlist("attachments")
+
+        print("Calling update_task service...")
+        task = task_services.update_task(task_id, data, new_files)
+        
+        print("Update successful")
+        return jsonify({"success": True, "task": task.to_dict()}), 200
     
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500

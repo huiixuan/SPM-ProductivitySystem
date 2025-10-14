@@ -8,11 +8,16 @@ import {
 } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { toast } from "sonner"
-import { FolderKanban } from 'lucide-react'
+import { FolderKanban } from "lucide-react"
+
+interface UserData {
+  role: string,
+  email: string
+}
 
 type TaskInfoCardProps = {
   task_id: number,
-  currentUserRole: string
+  currentUserData: UserData
 }
 
 interface Task {
@@ -24,10 +29,19 @@ interface Task {
   created_at: string,
   notes: string,
   owner_email: string,
-  project: string
+  project: string,
+  collaborators?: {
+    id: number,
+    email: string,
+    name?: string
+  }[],
+  attachments?: {
+    id: number,
+    filename: string
+  }[]
 }
 
-export default function TaskInfoCard({ task_id, currentUserRole }: TaskInfoCardProps) {
+export default function TaskInfoCard({ task_id, currentUserData }: TaskInfoCardProps) {
   const [task, setTask] = useState<Task | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState<boolean>(false)
@@ -61,14 +75,14 @@ export default function TaskInfoCard({ task_id, currentUserRole }: TaskInfoCardP
   const handleUpdateSuccess = () => {
     toast.success("Task updated successfully")
     setOpen(false)
-    fetchTask() 
+    fetchTask()
   }
 
   const badgeColor: Record<string, string> = {
     "Unassigned": "bg-gray-400",
     "Ongoing": "bg-blue-400",
     "Pending Review": "bg-amber-400",
-    "Completed": "bg-green-400"
+    "Completed": "bg-emerald-400"
   }
 
   if (!task) return 
@@ -100,7 +114,7 @@ export default function TaskInfoCard({ task_id, currentUserRole }: TaskInfoCardP
             </CardContent>
           </Card>
           
-          <UpdateTaskDialog open={open} setOpen={setOpen} task={task} currentUserRole={currentUserRole} onUpdateSuccess={handleUpdateSuccess} />
+          <UpdateTaskDialog open={open} setOpen={setOpen} task={task} currentUserData={currentUserData} onUpdateSuccess={handleUpdateSuccess} />
         </div>
       )}
     </div>

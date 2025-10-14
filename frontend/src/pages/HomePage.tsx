@@ -5,6 +5,7 @@ import TaskCreation from "@/components/TaskManagement/TaskCreation";
 import TaskInfoCard from "@/components/TaskManagement/TaskInfoCard";
 import NewProjectButton from "@/components/Project/NewProjectButton";
 import ProjectList from "@/components/Project/ProjectList";
+import { toast } from "sonner";
 
 interface UserData {
   role: string,
@@ -39,7 +40,7 @@ export default function HomePage() {
           if (res.status === 401 || res.status === 422) {
             localStorage.removeItem("token");
             if (localStorage.getItem("rememberMe") === "true") {
-              alert("Your session has expired. Please login again.");
+              toast.error("Your session has expired. Please login again.");
             }
             navigate("/");
             return;
@@ -70,7 +71,7 @@ export default function HomePage() {
     localStorage.removeItem("token");
     localStorage.removeItem("rememberMe");
     localStorage.removeItem("rememberedEmail");
-    alert("Logged out successfully!");
+    toast.success("Logged out successfully!");
     navigate("/");
   };
 
@@ -112,7 +113,7 @@ export default function HomePage() {
         Logout
       </button>
 
-      <TaskInfoCard task_id={4} />
+      <TaskInfoCard task_id={43} currentUserData={userData} />
     </div>
   );
 }
