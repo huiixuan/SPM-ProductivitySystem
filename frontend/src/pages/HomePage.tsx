@@ -5,10 +5,16 @@ import TaskCreation from "@/components/TaskManagement/TaskCreation";
 import TaskInfoCard from "@/components/TaskManagement/TaskInfoCard";
 import NewProjectButton from "@/components/Project/NewProjectButton";
 import ProjectList from "@/components/Project/ProjectList";
+import { toast } from "sonner";
+
+interface UserData {
+  role: string,
+  email: string
+}
 
 export default function HomePage() {
   const [dashboard, setDashboard] = useState("");
-  const [role, setRole] = useState<string>("");
+  const [userData, setUserData] = useState<UserData>({ role: "", email: "" });
   const [refreshKey, setRefreshKey] = useState(0);
   const navigate = useNavigate();
 
@@ -34,7 +40,7 @@ export default function HomePage() {
           if (res.status === 401 || res.status === 422) {
             localStorage.removeItem("token");
             if (localStorage.getItem("rememberMe") === "true") {
-              alert("Your session has expired. Please login again.");
+              toast.error("Your session has expired. Please login again.");
             }
             navigate("/");
             return;
@@ -45,8 +51,10 @@ export default function HomePage() {
       })
       .then((data) => {
         if (!data) return;
-        const roleLower = (data.dashboard || "").toLowerCase();
-        setRole(roleLower);
+
+        const roleLower = (data.role || "").toLowerCase();
+        setUserData(data);
+
         if (roleLower === "staff") setDashboard("This is the Staff Dashboard");
         else if (roleLower === "hr") setDashboard("This is the HR Dashboard");
         else if (roleLower === "manager") setDashboard("This is the Manager Dashboard");
@@ -63,11 +71,11 @@ export default function HomePage() {
     localStorage.removeItem("token");
     localStorage.removeItem("rememberMe");
     localStorage.removeItem("rememberedEmail");
-    alert("Logged out successfully!");
+    toast.success("Logged out successfully!");
     navigate("/");
   };
 
-  const canCreateProject = role === "manager" || role === "director";
+  const canCreateProject = userData.role === "manager" || userData.role === "director";
 
   return (
     <div style={{ padding: "2rem" }}>
@@ -81,7 +89,7 @@ export default function HomePage() {
       )}
 
       <div className="flex items-center gap-3 mb-4">
-        <TaskCreation />
+        <TaskCreation buttonName="New Task" currentUserData={userData} />
         <NewProjectButton
           disabled={!canCreateProject}
           onCreated={() => setRefreshKey((k) => k + 1)}
@@ -105,7 +113,7 @@ export default function HomePage() {
         Logout
       </button>
 
-      <TaskInfoCard task_id={4} />
+      <TaskInfoCard task_id={43} currentUserData={userData} />
     </div>
   );
 }
