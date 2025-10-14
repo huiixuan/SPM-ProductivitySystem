@@ -217,7 +217,7 @@ export default function TaskCreation({ buttonName, currentUserData }: TaskCreati
                       <SelectContent>
                         {priorities.map(p => (
                           <SelectItem key={p} value={p.toString()}>
-                            {p} {/* Changed from "Priority {p}" to just "{p}" */}
+                            {p}
                           </SelectItem>
                         ))}
                       </SelectContent>
