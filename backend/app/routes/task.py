@@ -3,11 +3,14 @@ from app.services import task_services
 from app.models import TaskStatus
 from datetime import datetime
 from sqlalchemy.exc import SQLAlchemyError
+import traceback
+from flask_jwt_extended import jwt_required, get_jwt_identity
+import json
 
 task_bp = Blueprint("task", __name__)
 
-@task_bp.route("/save-task", methods=["POST"])
-def save_task_route():
+@task_bp.route("/create-task", methods=["POST"])
+def create_task_route():
     data = request.form
     files = request.files.getlist("attachments")
     print("data:", data)
@@ -23,12 +26,12 @@ def save_task_route():
         owner_email = data.get("owner")
         collaborators = data.getlist("collaborators")
         notes = data.get("notes")
-        # attachments = request.files.getlist("attachments") if "attachments" in request.files else []
+        priority = data.get("priority")
 
         status_enum = TaskStatus(status)
         duedate = datetime.fromisoformat(duedate_str).date() if duedate_str else None
 
-        task = task_services.save_task(
+        task = task_services.create_task(
             title=title,
             description=description,
             duedate=duedate,
@@ -36,7 +39,8 @@ def save_task_route():
             owner_email=owner_email,
             collaborator_emails=collaborators,
             attachments=files,
-            notes=notes
+            notes=notes,
+            priority=priority,
         )
 
         return jsonify({
@@ -52,6 +56,38 @@ def save_task_route():
         return jsonify({"success": False, "error": str(se)}), 500
     
     except Exception as e:
+        print("--- AN ERROR OCCURRED ---")
+        traceback.print_exc() # This will print the full error traceback
+        print("--------------------------")
+        return jsonify({"error": "An internal error occurred"}), 500
+
+@task_bp.route("/get-task/<int:task_id>", methods=["GET"])
+def get_task_route(task_id):
+    try:
+        task = task_services.get_task(task_id)
+        if not task:
+            return jsonify({"error": "Task not found."}), 404
+        
+        return jsonify(task.to_dict()), 200
+    
+    except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 
+@task_bp.route("/update-task/<int:task_id>", methods=["PUT"])
+def update_task_route(task_id):
+    try:
+        print("Update route called for task:", task_id)
+        print("Form data received:", request.form)
+        print("Files received:", request.files)
+
+        data = dict(request.form)
+        new_files = request.files.getlist("attachments")
+
+        print("Calling update_task service...")
+        task = task_services.update_task(task_id, data, new_files)
+        
+        print("Update successful")
+        return jsonify({"success": True, "task": task.to_dict()}), 200
     
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500

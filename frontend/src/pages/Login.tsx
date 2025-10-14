@@ -1,13 +1,14 @@
 import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Button } from "../components/ui/button";
+import { Button } from "@/components/ui/button";
 import {
 	Card,
 	CardHeader,
 	CardTitle,
 	CardContent,
 	CardFooter,
-} from "../components/ui/card";
+} from "@/components/ui/card";
+import { toast } from "sonner";
 
 export default function Login() {
 	const [email, setEmail] = useState("");
@@ -58,7 +59,7 @@ export default function Login() {
 					localStorage.removeItem("savedPassword");
 				}
 
-				alert("Login successful!");
+				toast.success("Login successful!");
 				navigate("/HomePage");
 			} else {
 				setError(data.error || "Invalid username or password");

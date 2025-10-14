@@ -35,11 +35,22 @@ import {
 import { toast } from "sonner"
 import { Plus } from "lucide-react"
 
+interface UserData {
+  role: string,
+  email: string
+}
+
+type TaskCreationProps = {
+  buttonName: string,
+  currentUserData: UserData
+}
+
 const formSchema = z.object({
   title: z.string().min(1, "Title is required."),
   description: z.string().optional(),
   duedate: z.date(),
   status: z.string().min(1, "Select a status."),
+  priority: z.number().min(1, "Priority is required."),
   owner: z.string().min(1, "Task owner is required."),
   collaborators: z.array(z.string()),
   notes: z.string().optional(),
@@ -47,9 +58,10 @@ const formSchema = z.object({
 })
 type TaskFormData = z.infer<typeof formSchema>
 
-export function TaskCreation() {
+export default function TaskCreation({ buttonName, currentUserData }: TaskCreationProps) {
   const [open, setOpen] = useState<boolean>(false)
   const statuses = ["Unassigned", "Ongoing", "Pending Review", "Completed"]
+  const priorities = Array.from({ length: 10 }, (_, i) => i + 1)
 
   const form = useForm<TaskFormData>({
     resolver: zodResolver(formSchema),
@@ -57,11 +69,13 @@ export function TaskCreation() {
     defaultValues: {
       title: "",
       description: "",
-      status: "",
-      owner: "",
-      collaborators: [],
+      duedate: new Date(),
+      status: "Unassigned",
+      priority: 1,
+      owner: currentUserData.email,
+      collaborators: [] as string[],
       notes: "",
-      attachments: []
+      attachments: [] as File[],
     }
   })
 
@@ -69,31 +83,32 @@ export function TaskCreation() {
     const formData = new FormData()
 
     formData.append("title", values.title)
-
-    if (values.description) {
-      formData.append("description", values.description)
-    }
-
+    formData.append("description", values.description || "")
     formData.append("duedate", values.duedate.toISOString())
     formData.append("status", values.status)
+    formData.append("priority", values.priority.toString())
     formData.append("owner", values.owner)
+    formData.append("notes", values.notes || "")
 
-    if (values.notes) {
-      formData.append("notes", values.notes)
+    if (values.collaborators.length > 0) {
+      values.collaborators.forEach(collaborator => {
+        formData.append("collaborators", collaborator)
+      })
+    } else {
+      formData.append("collaborators", "[]")
     }
 
-    values.collaborators.forEach((c) => {
-      formData.append("collaborators", c)
-    })
-
-    values.attachments.forEach((file) => {
-      formData.append("attachments", file)
-    })
+    if (values.attachments.length > 0) {
+      values.attachments.forEach(file => {
+        formData.append("attachments", file)
+      })
+    }
 
     try {
-      const res = await fetch("/api/task/save-task", {
+      const res = await fetch("/api/task/create-task", {
         method: "POST",
-        body: formData
+        body: formData,
+        credentials: "include"
       })
 
       const data = await res.json()
@@ -121,7 +136,7 @@ export function TaskCreation() {
         setOpen(isOpen)
     }}>
       <DialogTrigger asChild>
-        <Button variant="outline"><Plus /> New Task</Button>
+        <Button variant="outline"><Plus /> {buttonName}</Button>
       </DialogTrigger>
 
       <DialogContent className="sm:max-w-[825px]">
@@ -142,9 +157,7 @@ export function TaskCreation() {
                     <Input {...field} />
                   </FormControl>
 
-                  {fieldState.error && (
-                    <p className="text-red-700">{fieldState.error.message}</p>
-                  )}
+                  {fieldState.error && (<p className="text-red-700">{fieldState.error.message}</p>)}
                 </FormItem>
               )} />
 
@@ -165,9 +178,7 @@ export function TaskCreation() {
                       <DatePicker date={field.value} onChange={field.onChange} />
                     </FormControl>
 
-                    {fieldState.error && (
-                      <p className="text-red-700">{fieldState.error.message}</p>
-                    )}
+                    {fieldState.error && (<p className="text-red-700">{fieldState.error.message}</p>)}
                   </FormItem>
                 )} />
 
@@ -188,31 +199,56 @@ export function TaskCreation() {
                       </Select>
                     </FormControl>
 
-                    {fieldState.error && (
-                      <p className="text-red-700">{fieldState.error.message}</p>
-                    )}
+                    {fieldState.error && (<p className="text-red-700">{fieldState.error.message}</p>)}
                   </FormItem>
                 )} />
               </div>
 
-              <FormField control={form.control} name="owner" render={({ field, fieldState }) => (
-                <FormItem>
-                  <FormLabel>Task Owner</FormLabel>
-                  <FormControl>
-                    <EmailCombobox value={field.value} onChange={field.onChange} placeholder="Select Task Owner..." />
-                  </FormControl>
+             
+              <div className="flex flex-row gap-2">
+                <FormField control={form.control} name="priority" render={({ field, fieldState }) => (
+                  <FormItem className="w-1/2">
+                    <FormLabel>Priority</FormLabel>
+                    <FormControl>
+                      <Select onValueChange={(value) => field.onChange(parseInt(value, 10))} value={field.value?.toString()}>
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Priority" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {priorities.map(p => (
+                            <SelectItem key={p} value={p.toString()}>
+                              {p}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </FormControl>
+                    {fieldState.error && (<p className="text-red-700">{fieldState.error.message}</p>)}
+                  </FormItem>
+                )} />
 
-                  {fieldState.error && (
-                    <p className="text-red-700">{fieldState.error.message}</p>
-                  )}
-                </FormItem>
-              )} />
+
+                <FormField control={form.control} name="owner" render={({ field, fieldState }) => (
+                  <FormItem className="w-1/2">
+                    <FormLabel>Task Owner</FormLabel>
+                    <FormControl>
+                      {["manager", "director"].includes(currentUserData.role) ? (
+                          <EmailCombobox value={field.value} onChange={field.onChange} placeholder="Select Task Owner..." currentUserData={currentUserData} />
+                        ) : (
+                          <Input className="text-black" {...field} disabled />
+                        )}   
+                    </FormControl>
+
+                    {fieldState.error && (<p className="text-red-700">{fieldState.error.message}</p>)}
+                  </FormItem>
+                )} />
+              </div>
 
               <FormField control={form.control} name="collaborators" render={({ field }) => (
                 <FormItem>
                   <FormLabel>Collaborators</FormLabel>
                   <FormControl>
-                    <EmailCombobox value={field.value as string[]} onChange={field.onChange} placeholder="Select Collaborators..." multiple />
+                    <EmailCombobox value={field.value as string[]} onChange={field.onChange} placeholder="Select Collaborators..." currentUserData={currentUserData} multiple />
                   </FormControl>
                 </FormItem>
               )} />
@@ -240,7 +276,7 @@ export function TaskCreation() {
               <DialogClose asChild>
                 <Button variant="outline">Cancel</Button>
               </DialogClose>
-
+              
               <Button type="submit" disabled={!form.formState.isValid}>Create Task</Button>
             </DialogFooter>
           </form>

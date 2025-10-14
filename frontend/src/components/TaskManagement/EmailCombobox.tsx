@@ -15,31 +15,63 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { ChevronDown, X } from "lucide-react"
 
+interface UserData {
+  role: string,
+  email: string
+}
+
 type OwnerSelectionProps = {
   value?: string | string[],
   onChange?: (value: string | string[]) => void,
   placeholder?: string,
+  currentUserData: UserData,
   multiple?: boolean
 }
 
-export default function EmailCombobox({ value, onChange, placeholder = "Select email...", multiple = false }: OwnerSelectionProps) {
+type UserOption = {
+  role: string,
+  email: string
+}
+
+export default function EmailCombobox({ 
+  value, 
+  onChange, 
+  placeholder = "Select email...", 
+  currentUserData,
+  multiple = false
+}: OwnerSelectionProps) {
   const [open, setOpen] = useState<boolean>(false)
   const [selected, setSelected] = useState<string[]>(Array.isArray(value) ? value : value ? [value] : [])
-  const [users, setUsers] = useState<string[]>([]) 
+  const [users, setUsers] = useState<UserOption[]>([]) 
   const [error, setError] = useState("")
 
+  const ROLE_HIERARCHY: Record<string, number> = {
+    "staff": 1,
+    "manager": 2,
+    "director": 3
+  }
+
   useEffect(() => {
-    fetch("/api/user/get-all-emails")
+    fetch("/api/user/get-all-users")
       .then(res => {
-        if (!res.ok) return res.json().then(data => {
-          console.log(data.message)
-          throw new Error(data.message)
-        })
+        if (!res.ok) throw new Error("Failed to fetch users.")
         return res.json()
       })
-      .then((data: string[]) => setUsers(data as string[]))
+      .then((data: UserOption[]) => setUsers(data))
       .catch(err => setError(err.message))
   }, [])
+
+  const validUsers = users.filter(user => {
+    if (user.email === currentUserData.email) {
+      return true
+    }
+
+    if (!multiple) {
+      return ROLE_HIERARCHY[user.role.toLowerCase()] < ROLE_HIERARCHY[currentUserData.role]
+    }
+
+    return true
+  })
 
   const handleSelect = (email: string) => {
     let updated: string[]
@@ -114,9 +146,15 @@ export default function EmailCombobox({ value, onChange, placeholder = "Select e
           <CommandList>
             <CommandEmpty>No results found.</CommandEmpty>
             
-            {users.map(user => (
-              <CommandItem key={user} value={user} onSelect={() => handleSelect(user)}>{user}</CommandItem>
-            ))}
+            {!multiple ? (
+              validUsers.map(user => (
+                <CommandItem key={user.email} value={user.email} onSelect={() => handleSelect(user.email)}>{user.email}</CommandItem>
+              ))
+            ): (
+              users.map(user => (
+                <CommandItem key={user.email} value={user.email} onSelect={() => handleSelect(user.email)}>{user.email}</CommandItem>
+              ))
+            )}
           </CommandList>
       </Command>
       </PopoverContent>

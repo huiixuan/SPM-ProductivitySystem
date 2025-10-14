@@ -1,52 +1,60 @@
 from flask import Blueprint, request, jsonify
 from app.models import db, User
-from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity, get_jwt
+from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
 from datetime import datetime, timedelta
 from app.services.user_services import create_user, validate_login, get_user_by_email
 
+# The blueprint for authentication routes
 auth_bp = Blueprint("auth", __name__)
 
-# Track failed login attempts in memory
+# In-memory dictionary to track failed login attempts for brute-force protection
 failed_attempts = {}
 LOCKOUT_TIME = timedelta(minutes=15)
 
+
+# ---------- Register ----------
 @auth_bp.route('/register', methods=['POST'])
 def register():
-    data = request.get_json()
-    name = data.get("name")
-    role = data.get("role")
-    name = data.get("name")
-    email = data.get("email")
-    password = data.get("password")
+    """Registers a new user."""
+    data = request.get_json() or {}
+    name = (data.get("name") or "").strip()
+    role = (data.get("role") or "").strip()
+    email = (data.get("email") or "").strip().lower()
+    password = data.get("password") or ""
 
-    if not role or not name or not email or not password:
+    if not all([role, name, email, password]):
         return jsonify({"error": "All fields are required"}), 400
 
-    # Check if email already exists
     if User.query.filter_by(email=email).first():
-        return jsonify({"error": "email already exists"}), 400
+        return jsonify({"error": "Email already exists"}), 400
 
-    # Create new user
+    # Create user via service and add to the session
     user = create_user(name, email, role, password)
 
-    # Create access token
-    access_token = create_access_token(identity=user.email)
-    return jsonify({"message": "User registered successfully", "access_token": access_token}), 201
+    # Create a token with the new user's unique ID as the identity
+    access_token = create_access_token(identity=str(user.id))
+    
+    return jsonify({
+        "message": "User registered successfully",
+        "access_token": access_token
+    }), 201
 
 
+# ---------- Login ----------
 @auth_bp.route("/login", methods=["POST"])
 def login():
-    data = request.get_json()
-    email = data.get("email")
-    password = data.get("password")
-    remember_me = data.get("remember_me", False)  # Get remember_me flag
+    """Logs in a user and returns a JWT."""
+    data = request.get_json() or {}
+    email = (data.get("email") or "").strip().lower()
+    password = data.get("password") or ""
+    remember_me = bool(data.get("remember_me", False))
 
     if not email or not password:
         return jsonify({"error": "Email and password are required"}), 400
 
     now = datetime.utcnow()
 
-    # Lockout check
+    # Lockout check to prevent brute-force attacks
     if email in failed_attempts:
         attempt = failed_attempts[email]
         if attempt["count"] >= 3:
@@ -54,106 +62,88 @@ def login():
             if lock_time and now - lock_time < LOCKOUT_TIME:
                 return jsonify({"error": "Account locked for 15 minutes"}), 403
             else:
-                failed_attempts.pop(email)
+                # Reset attempts if lockout time has passed
+                failed_attempts.pop(email, None)
 
     user = User.query.filter_by(email=email).first()
 
     if user and user.check_password(password):
-        # Reset failed attempts on success
+        # On successful login, clear any failed attempts
         failed_attempts.pop(email, None)
 
-        # Set token expiration based on remember_me
-        if remember_me:
-            # 1 week expiration for "Remember me"
-            expires_delta = timedelta(days=7)
-        else:
-            # 1 hour expiration for normal session
-            expires_delta = timedelta(hours=1)
+        # Set token duration
+        expires_delta = timedelta(days=7) if remember_me else timedelta(hours=1)
 
-        # Use email as identity
+        # ✅ CRITICAL: The token's identity is the user's integer ID, converted to a string.
         access_token = create_access_token(
-            identity=email,
+            identity=str(user.id),
             expires_delta=expires_delta,
         )
 
         return jsonify({
             "message": "Login successful",
             "access_token": access_token,
-            "expires_in": expires_delta.total_seconds()  # Optional: send expiration time
+            "expires_in": int(expires_delta.total_seconds())
         }), 200
     else:
-        # Track failed attempts
+        # On failed login, track the attempt
         if email not in failed_attempts:
             failed_attempts[email] = {"count": 1, "lock_time": None}
         else:
             failed_attempts[email]["count"] += 1
-            if failed_attempts[email]["count"] == 3:
+            if failed_attempts[email]["count"] >= 3:
                 failed_attempts[email]["lock_time"] = now
 
         return jsonify({"error": "Invalid email or password"}), 401
 
+
+# ---------- Forgot Password ----------
 @auth_bp.route("/forgot-password", methods=["POST"])
 def forgot_password():
+    """Allows a user to reset their password."""
     try:
-        data = request.get_json()
-        email = data.get("email")
-        new_password = data.get("new_password")
+        data = request.get_json() or {}
+        email = (data.get("email") or "").strip().lower()
+        new_password = data.get("new_password") or ""
 
         if not email or not new_password:
-            return jsonify({"error": "email and new password are required"}), 400
+            return jsonify({"error": "Email and new password are required"}), 400
 
-        # Find the user
         user = User.query.filter_by(email=email).first()
-        
         if not user:
-            return jsonify({"error": "User not found"}), 404
+            # Return a generic message to prevent user enumeration
+            return jsonify({"message": "If a user with that email exists, the password has been reset."}), 200
 
-        # Update the password
         user.set_password(new_password)
         db.session.commit()
-
         return jsonify({"message": "Password reset successfully"}), 200
-
     except Exception as e:
-        print(f"Password reset error: {e}")
         db.session.rollback()
-        return jsonify({"error": "Server error during password reset"}), 500
+        return jsonify({"error": f"An unexpected server error occurred: {e}"}), 500
 
 
+# ---------- Dashboard (Example Protected Route) ----------
 @auth_bp.route("/dashboard", methods=["GET"])
 @jwt_required()
 def dashboard():
+    """An example of a protected route that returns user-specific data."""
     try:
-        # Get the current user's identity (email)
-        email = get_jwt_identity()
-        
-        # Look up the user in the database to get their actual role
-        user = User.query.filter_by(email=email).first()
+        # ✅ CRITICAL: Get the user ID (as a string) from the token's identity.
+        user_id_str = get_jwt_identity()
+        user_id = int(user_id_str)
+
+        # Fetch the user by their primary key (ID). This is efficient and correct.
+        user = db.session.get(User, user_id)
         
         if not user:
-            return jsonify({"error": "User not found"}), 404
+            return jsonify({"error": "User associated with token not found"}), 404
             
+        # Return the user's role for the dashboard
         role = user.role.value.lower()
-        print(f"Debug: User {email}, Role: {role}")  # This will help debug
+        email = user.email
+        return jsonify({"role": role, "email": email}), 200
 
-        
-        dashboards = {
-            "manager": "Manager",
-            "hr": "HR",
-            "director": "Director",
-            "staff": "Staff",
-        }
-
-        if role == "manager":
-            return jsonify({"dashboard": "Manager"}), 200
-        elif role == "hr":
-            return jsonify({"dashboard": "HR"}), 200
-        elif role == "director":
-            return jsonify({"dashboard": "Director"}), 200
-        elif role == "staff":
-            return jsonify({"dashboard": "Staff"}), 200
-        else:
-            return jsonify({"error": "Unauthorized role"}), 403
+    except (ValueError, TypeError):
+        return jsonify({"error": "Invalid token identity"}), 401
     except Exception as e:
-        print(f"Dashboard error: {e}")
-        return jsonify({"error": "Server error"}), 500
+        return jsonify({"error": f"An unexpected server error occurred: {e}"}), 500
