@@ -1,6 +1,6 @@
 import pytest
 from app.models import db, UserRole
-from app.services.user_services import create_user, get_user_by_email, validate_login, get_all_emails
+from app.services.user_services import create_user, get_user_by_email, validate_login
 from flask import Flask
 from sqlalchemy.exc import IntegrityError
 
