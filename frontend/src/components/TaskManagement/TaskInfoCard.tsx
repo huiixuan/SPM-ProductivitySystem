@@ -26,6 +26,7 @@ interface Task {
   description?: string,
   duedate: string,
   status: string,
+  priority: number,
   created_at: string,
   notes: string,
   owner_email: string,
@@ -100,7 +101,8 @@ export default function TaskInfoCard({ task_id, currentUserData }: TaskInfoCardP
               <CardTitle>{task.title}</CardTitle>          
               <CardDescription className="mt-1">
                 Task Owner: {task.owner_email} <br/>
-                Due Date: {task.duedate} 
+                Due Date: {task.duedate} <br />
+                Priority: {task.priority} 
               </CardDescription>
 
               <Badge className={`${badgeColor[task.status]} text-white mt-3`}>{task.status}</Badge>

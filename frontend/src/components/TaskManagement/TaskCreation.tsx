@@ -205,27 +205,27 @@ export default function TaskCreation({ buttonName, currentUserData }: TaskCreati
               </div>
 
              
-            <div className="flex flex-row gap-2">
-              <FormField control={form.control} name="priority" render={({ field, fieldState }) => (
-                <FormItem className="w-1/2">
-                  <FormLabel>Priority</FormLabel>
-                  <FormControl>
-                    <Select onValueChange={(value) => field.onChange(parseInt(value, 10))} value={field.value?.toString()}>
-                      <SelectTrigger className="w-full">
-                        <SelectValue placeholder="Priority" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {priorities.map(p => (
-                          <SelectItem key={p} value={p.toString()}>
-                            {p}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </FormControl>
-                  {fieldState.error && (<p className="text-red-700">{fieldState.error.message}</p>)}
-                </FormItem>
-              )} />
+              <div className="flex flex-row gap-2">
+                <FormField control={form.control} name="priority" render={({ field, fieldState }) => (
+                  <FormItem className="w-1/2">
+                    <FormLabel>Priority</FormLabel>
+                    <FormControl>
+                      <Select onValueChange={(value) => field.onChange(parseInt(value, 10))} value={field.value?.toString()}>
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Priority" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {priorities.map(p => (
+                            <SelectItem key={p} value={p.toString()}>
+                              {p}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </FormControl>
+                    {fieldState.error && (<p className="text-red-700">{fieldState.error.message}</p>)}
+                  </FormItem>
+                )} />
 
 
                 <FormField control={form.control} name="owner" render={({ field, fieldState }) => (

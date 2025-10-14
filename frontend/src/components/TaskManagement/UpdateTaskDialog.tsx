@@ -53,6 +53,7 @@ const formSchema = z.object({
   description: z.string().optional(),
   duedate: z.date(),
   status: z.string().min(1, "Select a status."),
+  priority: z.number().min(1, "Priority is required."),
   owner: z.string().min(1, "Task owner is required."),
   collaborators: z.array(z.string()).optional(),
   notes: z.string().optional(),
@@ -66,6 +67,7 @@ interface Task {
   description?: string,
   duedate: string,
   status: string,
+  priority: number,
   created_at: string,
   notes: string,
   owner_email: string,
@@ -94,7 +96,6 @@ type UpdateTaskDialogProps = {
   onUpdateSuccess: () => void
 }
 
-
 export default function UpdateTaskDialog({ 
   open,
   setOpen,
@@ -103,6 +104,7 @@ export default function UpdateTaskDialog({
   onUpdateSuccess
 }: UpdateTaskDialogProps) {
   const statuses = ["Unassigned", "Ongoing", "Pending Review", "Completed"]
+  const priorities = Array.from({ length: 10 }, (_, i) => i + 1)
 
   const form = useForm<TaskFormData>({
     resolver: zodResolver(formSchema),
@@ -112,6 +114,7 @@ export default function UpdateTaskDialog({
       description: task.description || "",
       status: task.status,
       duedate: new Date(task.duedate),
+      priority: task.priority || 1,
       owner: task.owner_email,
       collaborators: task.collaborators?.map(c => c.email) || [],
       notes: task.notes || "",
@@ -125,6 +128,7 @@ export default function UpdateTaskDialog({
       description: task.description || "",
       duedate: new Date(task.duedate),
       status: task.status,
+      priority: task.priority || 1,
       owner: task.owner_email,
       collaborators: task.collaborators?.map(c => c.email) || [],
       notes: task.notes || "",
@@ -143,6 +147,7 @@ export default function UpdateTaskDialog({
       formData.append("description", values.description || "")
       formData.append("duedate", values.duedate.toISOString())
       formData.append("status", values.status)
+      formData.append("priority", values.priority.toString())
       formData.append("owner", values.owner)
       formData.append("notes", values.notes || "")
 
@@ -281,25 +286,54 @@ export default function UpdateTaskDialog({
                   </FormItem>
                 )} />
               </div>
+              
+              <div className="flex flex-row gap-2">
+                <FormField control={form.control} name="priority" render={({ field, fieldState }) => (
+                  <FormItem className="w-1/2">
+                    <FormLabel>Priority</FormLabel>
+                    <FormControl>
+                      {isOwner? (
+                        <Select onValueChange={(v) => field.onChange(parseInt(v))} value={field.value.toString()}>
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Priority" />
+                          </SelectTrigger>
 
-              <FormField control={form.control} name="owner" render={({ field, fieldState }) => (
-                <FormItem>
-                  <FormLabel>Task Owner</FormLabel>
-                  <FormControl>
-                    {isOwner ? (
-                        <EmailCombobox value={field.value} onChange={field.onChange} placeholder="Select Task Owner..." currentUserData={currentUserData} />
+                          <SelectContent>
+                            {priorities.map(p => (
+                              <SelectItem key={p} value={p.toString()}>{p}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       ) : (
-                        <div>
-                          {task.owner_email}
-                        </div>
-                      )} 
-                  </FormControl>
+                        <div>{task.priority}</div>
+                      )}
+                    </FormControl>
 
-                  {fieldState.error && (
-                    <p className="text-red-700">{fieldState.error.message}</p>
-                  )}
-                </FormItem>
-              )} />
+                    {fieldState.error && (
+                      <p className="text-red-700">{fieldState.error.message}</p>
+                    )}
+                  </FormItem>
+                )} />
+
+                <FormField control={form.control} name="owner" render={({ field, fieldState }) => (
+                  <FormItem className="w-1/2">
+                    <FormLabel>Task Owner</FormLabel>
+                    <FormControl>
+                      {isOwner ? (
+                          <EmailCombobox value={field.value} onChange={field.onChange} placeholder="Select Task Owner..." currentUserData={currentUserData} />
+                        ) : (
+                          <div>
+                            {task.owner_email}
+                          </div>
+                        )} 
+                    </FormControl>
+
+                    {fieldState.error && (
+                      <p className="text-red-700">{fieldState.error.message}</p>
+                    )}
+                  </FormItem>
+                )} />
+              </div>
 
               <FormField control={form.control} name="collaborators" render={({ field }) => (
                 <FormItem>

@@ -71,7 +71,8 @@ def update_task(task_id, data, new_files):
                 task.status = TaskStatus(status)
             except ValueError:
                 raise ValueError(f"Invalid status: {status}")
-             
+            
+        task.priority = int(data.get("priority", task.priority))
         task.notes = data.get("notes", task.notes)
 
         if owner_email := data.get("owner"):
