@@ -62,6 +62,10 @@ export default function EmailCombobox({
   }, [])
 
   const validUsers = users.filter(user => {
+    if (user.email === currentUserData.email) {
+      return true
+    }
+
     if (!multiple) {
       return ROLE_HIERARCHY[user.role.toLowerCase()] < ROLE_HIERARCHY[currentUserData.role]
     }

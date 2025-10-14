@@ -12,6 +12,7 @@ from .routes.auth import auth_bp
 from .routes.user import user_bp
 from .routes.task import task_bp
 from .routes.project import project_bp
+from .routes.attachment import attachment_bp
 
 migrate = Migrate()
 bcrypt = Bcrypt()
@@ -21,7 +22,6 @@ load_dotenv()
 def create_app():
     app = Flask(__name__)
     app.config.from_object("config.Config")
-    CORS(app, origins=["http://localhost:5173"])
 
     # uploads (for project PDF attachments)
     app.config["UPLOAD_FOLDER"] = os.getenv("UPLOAD_FOLDER", "uploads")
@@ -50,5 +50,6 @@ def create_app():
     app.register_blueprint(user_bp, url_prefix="/api/user")
     app.register_blueprint(task_bp, url_prefix="/api/task")
     app.register_blueprint(project_bp, url_prefix="/api/project")
+    app.register_blueprint(attachment_bp, url_prefix="/api/attachment")
 
     return app

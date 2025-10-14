@@ -96,7 +96,15 @@ class Task(db.Model):
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "notes": self.notes,
             "owner_email": self.owner.email if self.owner else None,
-            "project": self.project.name if self.project else None
+            "project": self.project.name if self.project else None,
+            "collaborators": [
+                {"id": user.id, "email": user.email, "name": user.name}
+                for user in self.collaborators
+            ],
+            "attachments": [
+                {"id": att.id, "filename": att.filename}
+                for att in self.attachments
+            ]
         }
     
 class Attachment(db.Model):
