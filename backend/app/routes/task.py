@@ -1,15 +1,15 @@
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, session
 from app.services import task_services
 from app.models import TaskStatus
 from datetime import datetime
 from sqlalchemy.exc import SQLAlchemyError
 import traceback
 from flask_jwt_extended import jwt_required, get_jwt_identity
-import json
 
 task_bp = Blueprint("task", __name__)
 
 @task_bp.route("/create-task", methods=["POST"])
+@jwt_required()
 def create_task_route():
     data = request.form
     files = request.files.getlist("attachments")
@@ -62,6 +62,7 @@ def create_task_route():
         return jsonify({"error": "An internal error occurred"}), 500
 
 @task_bp.route("/get-task/<int:task_id>", methods=["GET"])
+@jwt_required()
 def get_task_route(task_id):
     try:
         task = task_services.get_task(task_id)
@@ -72,8 +73,24 @@ def get_task_route(task_id):
     
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
+    
+@task_bp.route("/get-all-tasks", methods=["GET"])
+@jwt_required()
+def get_all_tasks_route():
+    try:
+        user_id = get_jwt_identity()
+        if not user_id:
+            return jsonify({"error": "Not logged in"}), 401
+        
+        tasks = task_services.get_all_tasks(user_id) or []
+        data = [task.to_dict() for task in tasks]
+        return jsonify(data), 200
+
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
 
 @task_bp.route("/update-task/<int:task_id>", methods=["PUT"])
+@jwt_required()
 def update_task_route(task_id):
     try:
         print("Update route called for task:", task_id)

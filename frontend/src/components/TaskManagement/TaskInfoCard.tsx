@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import UpdateTaskDialog from "@/components/TaskManagement/UpdateTaskDialog"
 import {
   Card,
@@ -13,11 +13,6 @@ import { FolderKanban } from "lucide-react"
 interface UserData {
   role: string,
   email: string
-}
-
-type TaskInfoCardProps = {
-  task_id: number,
-  currentUserData: UserData
 }
 
 interface Task {
@@ -42,41 +37,20 @@ interface Task {
   }[]
 }
 
-export default function TaskInfoCard({ task_id, currentUserData }: TaskInfoCardProps) {
-  const [task, setTask] = useState<Task | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [loading, setLoading] = useState<boolean>(false)
+type TaskInfoCardProps = {
+  task: Task,
+  currentUserData: UserData,
+  onUpdate?: (updatedTask: Task) => void
+}
+
+export default function TaskInfoCard({ task, currentUserData, onUpdate }: TaskInfoCardProps) {
   const [open, setOpen] = useState<boolean>(false)
 
-  const fetchTask = async () => {
-    setError(null)
-    setLoading(true)
+  const handleUpdateSuccess = (updatedTask: Task) => {
+    if (onUpdate) onUpdate(updatedTask)
 
-    try {
-      const res = await fetch(`/api/task/get-task/${task_id}`)
-      if (!res.ok) {
-        throw new Error(`Failed to fetch task with ID ${task_id}: ${res.status}`)
-      }
-
-      const taskInfo = await res.json()
-      setTask(taskInfo)
-
-    } catch (e) {
-      setError("Unable to load task. Please try again later.")
-
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    fetchTask()
-  }, [task_id])
-
-  const handleUpdateSuccess = () => {
     toast.success("Task updated successfully")
     setOpen(false)
-    fetchTask()
   }
 
   const badgeColor: Record<string, string> = {
@@ -90,35 +64,29 @@ export default function TaskInfoCard({ task_id, currentUserData }: TaskInfoCardP
 
   return (
     <div>
-      {loading ? (
-        <p className="text-gray-600">Loading...</p>
-      ) : error ? (
-        <p className="text-red-700">{error}</p>
-      ) : (
-        <div>
-          <Card className="rounded-none" onClick={() => setOpen(true)}>
-            <CardContent>
-              <CardTitle>{task.title}</CardTitle>          
-              <CardDescription className="mt-1">
-                Task Owner: {task.owner_email} <br/>
-                Due Date: {task.duedate} <br />
-                Priority: {task.priority} 
-              </CardDescription>
+      <div>
+        <Card className="rounded-none bg-white" onClick={() => setOpen(true)}>
+          <CardContent>
+            <CardTitle>{task.title}</CardTitle>          
+            <CardDescription className="mt-1">
+              Task Owner: {task.owner_email} <br/>
+              Due Date: {task.duedate} <br />
+              Priority: {task.priority} 
+            </CardDescription>
 
-              <Badge className={`${badgeColor[task.status]} text-white mt-3`}>{task.status}</Badge>
-              
-              {task.project && (
-                <div className="flex flex-row gap-1 items-center mt-3 text-gray-600">
-                  <FolderKanban size={18} />
-                  {task.project}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-          
-          <UpdateTaskDialog open={open} setOpen={setOpen} task={task} currentUserData={currentUserData} onUpdateSuccess={handleUpdateSuccess} />
-        </div>
-      )}
+            <Badge className={`${badgeColor[task.status]} text-white mt-3`}>{task.status}</Badge>
+            
+            {task.project && (
+              <div className="flex flex-row gap-1 items-center mt-3 text-gray-600">
+                <FolderKanban size={18} />
+                {task.project}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+        
+        <UpdateTaskDialog open={open} setOpen={setOpen} task={task} currentUserData={currentUserData} onUpdateSuccess={handleUpdateSuccess} />
+      </div>
     </div>
   )
 }
