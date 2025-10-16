@@ -53,12 +53,6 @@ export default function TaskInfoCard({ task, currentUserData, onUpdate }: TaskIn
     setOpen(false)
   }
 
-  const handleUpdateSuccess = () => {
-    toast.success("Task updated successfully")
-    setOpen(false)
-    fetchTask()
-  }
-
   const badgeColor: Record<string, string> = {
     "Unassigned": "bg-gray-400",
     "Ongoing": "bg-blue-400",

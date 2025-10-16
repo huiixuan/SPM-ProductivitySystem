@@ -113,7 +113,7 @@ export default function HomePage() {
         Logout
       </button>
 
-      <TaskDashboard currentUserData={userData} />
+      <TaskDashboard currentUserData={userData} project={true} project_id={2} />
     </div>
   );
 }
