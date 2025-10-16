@@ -406,7 +406,7 @@ export default function UpdateTaskDialog({
                 <Button variant="outline">Cancel</Button>
               </DialogClose>
 
-              <Button type="submit" disabled={!form.formState.isValid}>Update Task</Button>
+              <Button type="submit" disabled={!form.formState.isValid || !isOwner || !isCollaborator}>Update Task</Button>
             </DialogFooter>
           </form>
         </Form>
