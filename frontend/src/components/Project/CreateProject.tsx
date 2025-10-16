@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { toast } from "sonner"; // ✅ Sonner
+import { toast } from "sonner"; 
 
 // validation schema
 const schema = z.object({
@@ -16,7 +16,7 @@ const schema = z.object({
   description: z.string().optional(),
   deadline: z.string().optional(),
   status: z.enum(["Not Started", "In Progress", "Completed"]).default("Not Started"),
-  collaborators: z.string().optional(), // comma-separated IDs
+  collaborators: z.string().optional(),
   attachment: z
     .any()
     .refine((f) => !f || (f instanceof File && f.type === "application/pdf"), { message: "Only PDF allowed" })
