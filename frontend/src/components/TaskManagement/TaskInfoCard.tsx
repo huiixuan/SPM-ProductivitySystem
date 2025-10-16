@@ -53,6 +53,12 @@ export default function TaskInfoCard({ task, currentUserData, onUpdate }: TaskIn
     setOpen(false)
   }
 
+  const handleUpdateSuccess = () => {
+    toast.success("Task updated successfully")
+    setOpen(false)
+    fetchTask()
+  }
+
   const badgeColor: Record<string, string> = {
     "Unassigned": "bg-gray-400",
     "Ongoing": "bg-blue-400",
@@ -64,29 +70,27 @@ export default function TaskInfoCard({ task, currentUserData, onUpdate }: TaskIn
 
   return (
     <div>
-      <div>
-        <Card className="rounded-none bg-white" onClick={() => setOpen(true)}>
-          <CardContent>
-            <CardTitle>{task.title}</CardTitle>          
-            <CardDescription className="mt-1">
-              Task Owner: {task.owner_email} <br/>
-              Due Date: {task.duedate} <br />
-              Priority: {task.priority} 
-            </CardDescription>
+      <Card className="rounded-none bg-white" onClick={() => setOpen(true)}>
+        <CardContent>
+          <CardTitle>{task.title}</CardTitle>          
+          <CardDescription className="mt-1">
+            Task Owner: {task.owner_email} <br/>
+            Due Date: {task.duedate} <br />
+            Priority: {task.priority} 
+          </CardDescription>
 
-            <Badge className={`${badgeColor[task.status]} text-white mt-3`}>{task.status}</Badge>
-            
-            {task.project && (
-              <div className="flex flex-row gap-1 items-center mt-3 text-gray-600">
-                <FolderKanban size={18} />
-                {task.project}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-        
-        <UpdateTaskDialog open={open} setOpen={setOpen} task={task} currentUserData={currentUserData} onUpdateSuccess={handleUpdateSuccess} />
-      </div>
+          <Badge className={`${badgeColor[task.status]} text-white mt-3`}>{task.status}</Badge>
+
+          {task.project && (
+            <div className="flex flex-row gap-1 items-center mt-3 text-gray-600">
+              <FolderKanban size={18} />
+              {task.project}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <UpdateTaskDialog open={open} setOpen={setOpen} task={task} currentUserData={currentUserData} onUpdateSuccess={handleUpdateSuccess} />
     </div>
   )
 }
