@@ -45,6 +45,8 @@ export default function EmailCombobox({
   const [users, setUsers] = useState<UserOption[]>([]) 
   const [error, setError] = useState("")
 
+  const token = localStorage.getItem("token")
+
   const ROLE_HIERARCHY: Record<string, number> = {
     "staff": 1,
     "manager": 2,
@@ -52,7 +54,22 @@ export default function EmailCombobox({
   }
 
   useEffect(() => {
-    fetch("/api/user/get-all-users")
+    if (Array.isArray(value)) {
+      setSelected(value)
+    } else if (value) {
+      setSelected([value])
+    } else {
+      setSelected([])
+    }
+  }, [value])
+
+  useEffect(() => {
+    fetch("/api/user/get-all-users", {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${token}`
+      }
+    })
       .then(res => {
         if (!res.ok) throw new Error("Failed to fetch users.")
         return res.json()

@@ -1,0 +1,118 @@
+import { useEffect, useState, useRef } from "react"
+import TaskInfoCard from "@/components/TaskManagement/TaskInfoCard"
+
+interface UserData {
+  role: string
+  email: string
+}
+
+interface DashboardProps {
+  currentUserData: UserData
+}
+
+interface Task {
+  id: number,
+  title: string,
+  description?: string,
+  duedate: string,
+  status: string,
+  priority: number,
+  created_at: string,
+  notes: string,
+  owner_email: string,
+  project: string,
+  collaborators?: {
+    id: number,
+    email: string,
+    name?: string
+  }[],
+  attachments?: {
+    id: number,
+    filename: string
+  }[]
+}
+
+export default function TaskDashboard({ currentUserData }: DashboardProps) {
+  const [tasks, setTasks] = useState<Task[]>([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const refreshTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+
+  const token = localStorage.getItem("token")
+
+  const statuses = ["Unassigned", "Ongoing", "Pending Review", "Completed"]
+
+  const fetchTasks = async (silent: boolean = false) => {
+    if (!silent) setLoading(true)
+    setError(null)
+
+    try {
+      const res = await fetch("/api/task/get-all-tasks", {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      })
+
+      if (!res.ok) throw new Error("Failed to fetch tasks")
+      const data = await res.json()
+
+      setTasks(data)
+
+    } catch (e) {
+      setError("Unable to load tasks.")
+
+    } finally {
+      if (!silent) setLoading(false)
+    }
+  }
+
+  const handleTaskUpdate = (updatedTask: Task) => {
+    setTasks((prev) => prev.map((t) => (t.id === updatedTask.id ? updatedTask : t)))
+    
+    if (refreshTimeoutRef.current) {
+      clearTimeout(refreshTimeoutRef.current)
+    }
+    
+    refreshTimeoutRef.current = setTimeout(() => {
+      fetchTasks(true)
+    }, 1500)
+  }
+
+  useEffect(() => {
+    fetchTasks()
+    
+    return () => {
+      if (refreshTimeoutRef.current) {
+        clearTimeout(refreshTimeoutRef.current)
+      }
+    }
+  }, [])
+
+  if (loading) return <p>Loading tasks...</p>
+  if (error) return <p className="text-red-700">{error}</p>
+
+  return (
+    <div className="flex gap-4 p-4 overflow-x-auto justify-center">
+      {statuses.map((status) => (
+        <div key={status} className="flex-1 min-w-[250px] bg-gray-100 p-2 rounded-md">
+          <p className="font-bold mb-2">
+            {status} ({tasks.filter(t => t.status === status).length})
+          </p>
+
+          {tasks
+            .filter(task => task.status === status)
+            .map(task => (
+              <div key={task.id} className="mb-2 cursor-pointer">
+                <TaskInfoCard 
+                  task={task} 
+                  currentUserData={currentUserData} 
+                  onUpdate={handleTaskUpdate} 
+                />
+              </div>
+            ))}
+        </div>
+      ))}
+    </div>
+  )
+}

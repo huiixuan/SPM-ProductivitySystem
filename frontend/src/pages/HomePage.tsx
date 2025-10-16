@@ -2,7 +2,7 @@
 import { useNavigate } from "react-router-dom";
 
 import TaskCreation from "@/components/TaskManagement/TaskCreation";
-import TaskInfoCard from "@/components/TaskManagement/TaskInfoCard";
+import TaskDashboard from "@/pages/TaskDashboard";
 import NewProjectButton from "@/components/Project/NewProjectButton";
 import ProjectList from "@/components/Project/ProjectList";
 import { toast } from "sonner";
@@ -113,7 +113,7 @@ export default function HomePage() {
         Logout
       </button>
 
-      <TaskInfoCard task_id={43} currentUserData={userData} />
+      <TaskDashboard currentUserData={userData} />
     </div>
   );
 }

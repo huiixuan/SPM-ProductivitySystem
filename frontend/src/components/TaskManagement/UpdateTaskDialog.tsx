@@ -93,7 +93,7 @@ type UpdateTaskDialogProps = {
   setOpen: (open: boolean) => void,
   task: Task,
   currentUserData: UserData,
-  onUpdateSuccess: () => void
+  onUpdateSuccess?: (updatedTask: Task) => void
 }
 
 export default function UpdateTaskDialog({ 
@@ -105,6 +105,8 @@ export default function UpdateTaskDialog({
 }: UpdateTaskDialogProps) {
   const statuses = ["Unassigned", "Ongoing", "Pending Review", "Completed"]
   const priorities = Array.from({ length: 10 }, (_, i) => i + 1)
+
+  const token = localStorage.getItem("token")
 
   const form = useForm<TaskFormData>({
     resolver: zodResolver(formSchema),
@@ -167,6 +169,9 @@ export default function UpdateTaskDialog({
 
       const res = await fetch(`/api/task/update-task/${task.id}`, {
         method: "PUT",
+        headers: {
+          Authorization: `Bearer ${token}`
+        },
         body: formData,
       })
 
@@ -176,7 +181,9 @@ export default function UpdateTaskDialog({
         return
       }
 
-      onUpdateSuccess()
+      const updatedTask: Task = await res.json()
+      if (onUpdateSuccess) onUpdateSuccess(updatedTask)
+      
       setOpen(false)
 
     } catch (error) {
@@ -406,7 +413,7 @@ export default function UpdateTaskDialog({
                 <Button variant="outline">Cancel</Button>
               </DialogClose>
 
-              <Button type="submit" disabled={!form.formState.isValid}>Update Task</Button>
+              <Button type="submit" disabled={!form.formState.isValid || !(isOwner || isCollaborator)}>Update Task</Button>
             </DialogFooter>
           </form>
         </Form>

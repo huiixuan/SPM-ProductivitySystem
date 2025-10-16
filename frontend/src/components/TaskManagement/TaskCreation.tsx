@@ -63,6 +63,8 @@ export default function TaskCreation({ buttonName, currentUserData }: TaskCreati
   const statuses = ["Unassigned", "Ongoing", "Pending Review", "Completed"]
   const priorities = Array.from({ length: 10 }, (_, i) => i + 1)
 
+  const token = localStorage.getItem("token")
+
   const form = useForm<TaskFormData>({
     resolver: zodResolver(formSchema),
     mode: "onChange",
@@ -107,8 +109,10 @@ export default function TaskCreation({ buttonName, currentUserData }: TaskCreati
     try {
       const res = await fetch("/api/task/create-task", {
         method: "POST",
-        body: formData,
-        credentials: "include"
+        headers: {
+          Authorization: `Bearer ${token}`
+        },
+        body: formData
       })
 
       const data = await res.json()

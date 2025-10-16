@@ -45,7 +45,15 @@ def get_task(task_id):
     except SQLAlchemyError as e:
         db.session.rollback()
         raise RuntimeError(f"Database error while retrieving task {task_id}: {e}")
-
+    
+def get_all_tasks(owner_id):
+    try:
+        return Task.query.filter_by(owner_id=owner_id).all()
+    
+    except SQLAlchemyError as e:
+        db.session.rollback()
+        raise RuntimeError(f"Database error while retrieving tasks of user {owner_id}: {e}")
+    
 def update_task(task_id, data, new_files):
     try:
         print(f"Starting update for task {task_id}")
