@@ -33,7 +33,7 @@ export default function HomePage() {
               <Button variant="outline">View Schedule</Button>
           </Link> */}
       </div>
-      <TaskDashboard currentUserData={userData} project project_id={2} />
+      <TaskDashboard />
     </div>
   );
 }

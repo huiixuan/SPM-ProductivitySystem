@@ -2,13 +2,7 @@ import { useEffect, useState, useRef } from "react"
 import { useAuth } from "@/hooks/useAuth"
 import TaskInfoCard from "@/components/TaskManagement/TaskInfoCard"
 
-interface UserData {
-  role: string
-  email: string
-}
-
 interface DashboardProps {
-  currentUserData: UserData,
   project?: boolean,
   project_id?: number
 }
@@ -35,14 +29,13 @@ interface Task {
   }[]
 }
 
-export default function TaskDashboard({ currentUserData, project = false, project_id }: DashboardProps) {
-  const { userData } = useAuth()
-  console.log(userData)
+export default function TaskDashboard({ project = false, project_id }: DashboardProps) {
   const [tasks, setTasks] = useState<Task[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const refreshTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
+  const { userData } = useAuth()
   const token = localStorage.getItem("token")
 
   const statuses = ["Unassigned", "Ongoing", "Pending Review", "Completed"]
