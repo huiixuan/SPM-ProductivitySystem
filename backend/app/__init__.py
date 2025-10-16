@@ -13,6 +13,7 @@ from .routes.user import user_bp
 from .routes.task import task_bp
 from .routes.project import project_bp
 from .routes.attachment import attachment_bp
+from .routes.calendar import calendar_bp
 
 migrate = Migrate()
 bcrypt = Bcrypt()
@@ -51,5 +52,6 @@ def create_app():
     app.register_blueprint(task_bp, url_prefix="/api/task")
     app.register_blueprint(project_bp, url_prefix="/api/project")
     app.register_blueprint(attachment_bp, url_prefix="/api/attachment")
+    app.register_blueprint(calendar_bp, url_prefix="/api/calendar")
 
     return app

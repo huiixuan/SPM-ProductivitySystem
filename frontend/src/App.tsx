@@ -5,6 +5,7 @@ import HomePage from "@/pages/HomePage";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import ForgotPassword from "./pages/ForgotPassword";
+import SchedulePage from "./pages/SchedulePage";
 
 function App() {
 	return (
@@ -15,6 +16,7 @@ function App() {
 					<Route path="/" element={<Login />} />
 					<Route path="/register" element={<Register />} />
 					<Route path="/HomePage" element={<HomePage />} />
+					<Route path="/schedule" element={<SchedulePage />} />
 					<Route
 						path="/forgot-password"
 						element={<ForgotPassword />}
