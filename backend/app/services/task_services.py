@@ -46,7 +46,7 @@ def get_task(task_id):
         db.session.rollback()
         raise RuntimeError(f"Database error while retrieving task {task_id}: {e}")
     
-def get_all_tasks(owner_id):
+def get_user_tasks(owner_id):
     try:
         return Task.query.filter_by(owner_id=owner_id).all()
     
@@ -54,6 +54,14 @@ def get_all_tasks(owner_id):
         db.session.rollback()
         raise RuntimeError(f"Database error while retrieving tasks of user {owner_id}: {e}")
     
+def get_project_tasks(project_id):
+    try:
+        return Task.query.filter_by(project_id=project_id).all()
+    
+    except SQLAlchemyError as e:
+        db.session.rollback()
+        raise RuntimeError(f"Database error while retrieving tasks of project {project_id}: {e}")
+
 def update_task(task_id, data, new_files):
     try:
         print(f"Starting update for task {task_id}")

@@ -1,4 +1,4 @@
-﻿import { useState } from "react";
+﻿﻿import { useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 
 import TaskCreation from "@/components/TaskManagement/TaskCreation";
@@ -13,42 +13,27 @@ export default function HomePage() {
   const canCreateProject = userData.role === "manager" || userData.role === "director";
 
   return (
-    <div className="p-6">
+    <div style={{ padding: "2rem" }}>
       <h1>Dashboard</h1>
-      <p>this is the {userData.role} dashboard</p>
+      <p>{userData.role}</p>
 
       {localStorage.getItem("rememberMe") === "true" && (
-        <p style={{ color: "green", fontStyle: "italic" }}>
-          ✓ You are staying logged in (1 week session)
-        </p>
+          <p style={{ color: "green", fontStyle: "italic" }}>
+              ✓ You are staying logged in (1 week session)
+          </p>
       )}
 
       <div className="flex items-center gap-3 mb-4">
-        <TaskCreation buttonName="New Task" currentUserData={userData} />
-        <NewProjectButton
-          disabled={!canCreateProject}
-          onCreated={() => setRefreshKey((k) => k + 1)}
-        />
+          <TaskCreation buttonName="New Task" currentUserData={userData} />
+          <NewProjectButton
+              disabled={!canCreateProject}
+              onCreated={() => setRefreshKey((k) => k + 1)}
+          />
+          {/* <Link to="/schedule">
+              <Button variant="outline">View Schedule</Button>
+          </Link> */}
       </div>
-
-      <ProjectList refreshKey={refreshKey} />
-
-      <button
-        onClick={handleLogout}
-        style={{
-          marginTop: "1rem",
-          backgroundColor: "red",
-          color: "white",
-          padding: "0.5rem 1rem",
-          border: "none",
-          borderRadius: "4px",
-          cursor: "pointer",
-        }}
-      >
-        Logout
-      </button>
-
-      <TaskDashboard currentUserData={userData} />
+      <TaskDashboard currentUserData={userData} project project_id={2} />
     </div>
   );
 }

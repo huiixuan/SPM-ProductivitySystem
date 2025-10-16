@@ -17,6 +17,7 @@ function App() {
 					<Route path="/register" element={<Register />} />
 					<Route path="/HomePage" element={<HomePage />} />
 					{/* <Route path="/All-Tasks" element={<TaskDashboard />} /> */}
+					<Route path="/schedule" element={<SchedulePage />} />
 					<Route
 						path="/forgot-password"
 						element={<ForgotPassword />}
