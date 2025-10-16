@@ -52,6 +52,16 @@ export default function EmailCombobox({
   }
 
   useEffect(() => {
+    if (Array.isArray(value)) {
+      setSelected(value)
+    } else if (value) {
+      setSelected([value])
+    } else {
+      setSelected([])
+    }
+  }, [value])
+
+  useEffect(() => {
     fetch("/api/user/get-all-users")
       .then(res => {
         if (!res.ok) throw new Error("Failed to fetch users.")
