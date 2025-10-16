@@ -74,18 +74,29 @@ def get_task_route(task_id):
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
     
-@task_bp.route("/get-all-tasks", methods=["GET"])
+@task_bp.route("/get-user-tasks", methods=["GET"])
 @jwt_required()
-def get_all_tasks_route():
+def get_user_tasks_route():
     try:
         user_id = get_jwt_identity()
         if not user_id:
             return jsonify({"error": "Not logged in"}), 401
         
-        tasks = task_services.get_all_tasks(user_id) or []
+        tasks = task_services.get_user_tasks(user_id) or []
         data = [task.to_dict() for task in tasks]
         return jsonify(data), 200
 
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+    
+@task_bp.route("/get-project-tasks/<int:project_id>", methods=["GET"])
+@jwt_required()
+def get_project_tasks_route(project_id):
+    try:
+        tasks = task_services.get_project_tasks(project_id) or []
+        data = [task.to_dict() for task in tasks]
+        return jsonify(data), 200
+    
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 

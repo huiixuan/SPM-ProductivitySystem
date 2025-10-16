@@ -7,7 +7,9 @@ interface UserData {
 }
 
 interface DashboardProps {
-  currentUserData: UserData
+  currentUserData: UserData,
+  project?: boolean,
+  project_id?: number
 }
 
 interface Task {
@@ -32,7 +34,7 @@ interface Task {
   }[]
 }
 
-export default function TaskDashboard({ currentUserData }: DashboardProps) {
+export default function TaskDashboard({ currentUserData, project = false, project_id }: DashboardProps) {
   const [tasks, setTasks] = useState<Task[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -47,12 +49,23 @@ export default function TaskDashboard({ currentUserData }: DashboardProps) {
     setError(null)
 
     try {
-      const res = await fetch("/api/task/get-all-tasks", {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
-      })
+      let res
+
+      if (project) {
+        res = await fetch(`/api/task/get-project-tasks/${project_id}`, {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        })
+      } else {
+        res = await fetch("/api/task/get-user-tasks", {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        })
+      }
 
       if (!res.ok) throw new Error("Failed to fetch tasks")
       const data = await res.json()

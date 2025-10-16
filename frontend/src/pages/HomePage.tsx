@@ -100,24 +100,7 @@ export default function HomePage() {
                 </Link>
             </div>
 
-            <ProjectList refreshKey={refreshKey} />
-
-            <button
-                onClick={handleLogout}
-                style={{
-                    marginTop: "1rem",
-                    backgroundColor: "red",
-                    color: "white",
-                    padding: "0.5rem 1rem",
-                    border: "none",
-                    borderRadius: "4px",
-                    cursor: "pointer",
-                }}
-            >
-                Logout
-            </button>
-
-            <TaskDashboard currentUserData={userData} />
-        </div>
-    );
+      <TaskDashboard currentUserData={userData} project project_id={2} />
+    </div>
+  );
 }
