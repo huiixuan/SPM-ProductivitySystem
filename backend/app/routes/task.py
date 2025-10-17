@@ -156,3 +156,37 @@ def update_task_route(task_id):
     
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
+
+@task_bp.route("", methods=["GET"])
+@jwt_required()
+def get_user_tasks():
+    """Get all tasks for the current user"""
+    try:
+        user_id_str = get_jwt_identity()
+        user_id = int(user_id_str)
+        user = db.session.get(User, user_id)
+        
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+
+        # Get tasks where user is owner
+        user_tasks = Task.query.filter(Task.owner_id == user_id).all()
+        
+        tasks_list = []
+        for task in user_tasks:
+            task_data = {
+                "id": task.id,
+                "title": task.title,
+                "description": task.description,
+                "duedate": task.duedate.isoformat() if task.duedate else None,
+                "status": task.status.value,
+                "owner_id": task.owner_id,
+                "created_at": task.created_at.isoformat() if task.created_at else None,
+                "notes": task.notes
+            }
+            tasks_list.append(task_data)
+
+        return jsonify({"tasks": tasks_list}), 200
+
+    except Exception as e:
+        return jsonify({"error": f"An unexpected server error occurred: {e}"}), 500
