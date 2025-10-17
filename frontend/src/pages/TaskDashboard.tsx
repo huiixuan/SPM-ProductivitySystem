@@ -102,26 +102,29 @@ export default function TaskDashboard({ project = false, project_id }: Dashboard
   if (error) return <p className="text-red-700">{error}</p>
 
   return (
-    <div className="flex gap-4 p-4 overflow-x-auto justify-center">
-      {statuses.map((status) => (
-        <div key={status} className="flex-1 min-w-[250px] bg-gray-100 p-2 rounded-md">
-          <p className="font-bold mb-2">
-            {status} ({tasks.filter(t => t.status === status).length})
-          </p>
+    <div className="p-4">
+      <p className="font-bold text-lg pl-4">Task Overview</p>
+      <div className="flex gap-4 p-4 overflow-x-auto justify-center">
+        {statuses.map((status) => (
+          <div key={status} className="flex-1 min-w-[250px] bg-gray-100 p-2 rounded-md">
+            <p className="font-bold mb-2">
+              {status} ({tasks.filter(t => t.status === status).length})
+            </p>
 
-          {tasks
-            .filter(task => task.status === status)
-            .map(task => (
-              <div key={task.id} className="mb-2 cursor-pointer">
-                <TaskInfoCard 
-                  task={task} 
-                  currentUserData={userData} 
-                  onUpdate={handleTaskUpdate} 
-                />
-              </div>
-            ))}
-        </div>
-      ))}
+            {tasks
+              .filter(task => task.status === status)
+              .map(task => (
+                <div key={task.id} className="mb-2 cursor-pointer">
+                  <TaskInfoCard 
+                    task={task} 
+                    currentUserData={userData} 
+                    onUpdate={handleTaskUpdate} 
+                  />
+                </div>
+              ))}
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
