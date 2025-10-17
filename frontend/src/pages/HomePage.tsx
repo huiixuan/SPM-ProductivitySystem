@@ -1,8 +1,7 @@
-﻿﻿import { useState } from "react";
+﻿import { useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 
 import TaskCreation from "@/components/TaskManagement/TaskCreation";
-import TaskDashboard from "@/pages/TaskDashboard";
 import NewProjectButton from "@/components/Project/NewProjectButton";
 import ProjectList from "@/components/Project/ProjectList";
 
@@ -29,11 +28,7 @@ export default function HomePage() {
               disabled={!canCreateProject}
               onCreated={() => setRefreshKey((k) => k + 1)}
           />
-          {/* <Link to="/schedule">
-              <Button variant="outline">View Schedule</Button>
-          </Link> */}
       </div>
-      <TaskDashboard />
     </div>
   );
 }
