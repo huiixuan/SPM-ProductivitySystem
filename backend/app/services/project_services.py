@@ -44,14 +44,25 @@ def create_project(name, description, deadline, status, owner_email, collaborato
         db.session.rollback()
         raise RuntimeError(f"Database error while creating project: {e}")
 
-def get_all_projects():
+def get_all_projects(user_id):
     try:
-        projects = Project.query.all()
+        # 2. Find the user object based on the provided ID
+        user = User.query.get(user_id)
+        if not user:
+            return [] # Return an empty list if the user isn't found
+
+        # 3. Perform a query that finds projects where the user is either the
+        #    owner OR is listed as a collaborator.
+        #    Use .distinct() to avoid duplicates.
+        projects = Project.query.filter(
+            (Project.owner_id == user.id) | (Project.collaborators.contains(user))
+        ).distinct().all()
+        
         return projects
     except SQLAlchemyError as e:
         raise RuntimeError(f"Database error while fetching projects: {e}")
 
-# --- THIS IS THE MISSING FUNCTION ---
+
 def get_project_by_id(project_id):
     try:
         project = Project.query.get(project_id)
@@ -62,7 +73,8 @@ def get_project_by_id(project_id):
         raise RuntimeError(f"Database error while fetching project {project_id}: {e}")
 # ------------------------------------
 
-def update_project(project_id, data, new_files):
+# Update the function signature to accept the 'collaborator_emails' list
+def update_project(project_id, data, new_files, collaborator_emails=None):
     try:
         project = Project.query.get(project_id)
         if not project:
@@ -81,15 +93,15 @@ def update_project(project_id, data, new_files):
             owner = User.query.filter_by(email=data["owner"]).first()
             if owner: project.owner = owner
 
-        # Update collaborators
-        if "collaborators" in data:
-            collaborators_emails = data.getlist("collaborators")
+        # FIX: Use the 'collaborator_emails' list directly instead of 'data.getlist()'
+        if collaborator_emails is not None:
             project.collaborators.clear()
-            for email in collaborators_emails:
+            for email in collaborator_emails:
                 user = User.query.filter_by(email=email).first()
-                if user: project.collaborators.append(user)
+                if user:
+                    project.collaborators.append(user)
 
-        # Update attachments
+        # Update attachments (this logic is fine)
         if "existing_attachments" in data:
             existing_attachments = json.loads(data["existing_attachments"])
             existing_ids = [att.get("id") for att in existing_attachments]
@@ -100,11 +112,7 @@ def update_project(project_id, data, new_files):
 
         if new_files:
             for file in new_files:
-                attachment = Attachment(
-                    filename=file.filename,
-                    content=file.read(),
-                    project=project
-                )
+                attachment = Attachment(filename=file.filename, content=file.read(), project=project)
                 db.session.add(attachment)
 
         db.session.commit()

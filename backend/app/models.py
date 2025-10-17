@@ -130,18 +130,15 @@ class Project(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(160), nullable=False)
     description = db.Column(db.Text)
+    notes = db.Column(db.Text)
     deadline = db.Column(db.Date)
     status = db.Column(db.Enum(ProjectStatus, native_enum=False), default=ProjectStatus.NOT_STARTED)
-    attachment_path = db.Column(db.String(255))
-    notes = db.Column(db.Text)
     
-    attachments = relationship("Attachment", back_populates="project", cascade="all, delete-orphan")
-    
-
     owner_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
     owner = relationship("User", back_populates="owned_projects")
 
     project_tasks = relationship("Task", back_populates="project", cascade="all, delete-orphan")
+    attachments = relationship("Attachment", back_populates="project", cascade="all, delete-orphan")
 
     collaborators = relationship(
         "User",
@@ -151,16 +148,20 @@ class Project(db.Model):
 
     created_at = db.Column(db.DateTime(timezone=True), server_default=func.now())
 
+   
     def to_dict(self):
         return {
             "id": self.id,
             "name": self.name,
             "description": self.description,
+            "notes": self.notes,
             "deadline": self.deadline.isoformat() if self.deadline else None,
             "status": self.status.value if self.status else None,
-            "attachment_path": self.attachment_path,
-            "owner_id": self.owner_id,
-            "collaborators": [c.email for c in self.collaborators],
-            "created_at": self.created_at.isoformat() if self.created_at else None,
-            "notes": self.notes,
+        
+            "owner_email": self.owner.email if self.owner else None,
+
+            "attachments": [{"id": att.id, "filename": att.filename} for att in self.attachments],
+            
+            
+            "collaborators": [{"id": c.id, "email": c.email} for c in self.collaborators],
         }

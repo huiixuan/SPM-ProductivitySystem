@@ -7,7 +7,9 @@ import Register from "@/pages/Register";
 import ForgotPassword from "@/pages/ForgotPassword";
 import TaskDashboard from "@/pages/TaskDashboard";
 import SchedulePage from "@/pages/SchedulePage";
-import Layout from "@/layout"
+import Layout from "@/layout";
+import ProjectDashboard from '@/pages/ProjectDashboard'; 
+import ProjectDetailPage from '@/pages/ProjectDetailPage';
 
 function App() {
 	return (
@@ -45,6 +47,15 @@ function App() {
 							</Layout>
 						} 
 					/>
+
+					<Route path="/projects" 
+					element={ 
+						<Layout>
+							<ProjectDashboard />
+						</Layout>} /> 
+
+        			<Route path="/projects/:projectId" 
+					element={<ProjectDetailPage />} />
 				</Routes>
 			</BrowserRouter>
 		</>

@@ -1,6 +1,6 @@
 from flask import Blueprint, jsonify, request
 from app.services import project_services
-from app.models import ProjectStatus
+from app.models import ProjectStatus, User # Make sure User is imported
 from datetime import datetime
 from sqlalchemy.exc import SQLAlchemyError
 from flask_jwt_extended import jwt_required, get_jwt_identity
@@ -21,14 +21,11 @@ def create_project_route():
         status = data.get("status")
         owner_email = data.get("owner")
         collaborator_emails = data.getlist("collaborators")
-        
-        # --- FIX STEP 1: Get 'notes' from the form data ---
         notes = data.get("notes")
 
         status_enum = ProjectStatus(status) if status else ProjectStatus.NOT_STARTED
         deadline = datetime.fromisoformat(deadline_str).date() if deadline_str else None
 
-        # --- FIX STEP 2: Pass 'notes' into the function call ---
         project = project_services.create_project(
             name=name,
             description=description,
@@ -37,7 +34,7 @@ def create_project_route():
             owner_email=owner_email,
             collaborator_emails=collaborator_emails,
             attachments=files,
-            notes=notes  # <--- This argument was missing
+            notes=notes
         )
 
         return jsonify({
@@ -51,13 +48,19 @@ def create_project_route():
         traceback.print_exc()
         return jsonify({"success": False, "error": str(e)}), 500
 
-# ... (The rest of your project.py file is likely correct, but ensure it matches below) ...
-
+# --- THIS IS THE CORRECTED FUNCTION ---
 @project_bp.route("/get-all-projects", methods=["GET"])
 @jwt_required()
 def get_all_projects_route():
     try:
-        projects = project_services.get_all_projects() or []
+        # 1. Get the ID of the currently logged-in user from the JWT token.
+        user_id = get_jwt_identity()
+        if not user_id:
+            return jsonify({"error": "User not found or not logged in"}), 401
+
+        # 2. Pass the user's ID to the service function to get only their projects.
+        projects = project_services.get_all_projects(user_id) or []
+        
         data = [p.to_dict() for p in projects]
         return jsonify(data), 200
     except Exception as e:
@@ -80,10 +83,10 @@ def get_project_route(project_id):
 @jwt_required()
 def update_project_route(project_id):
     try:
-        data = dict(request.form)
+        data = request.form
         new_files = request.files.getlist("attachments")
-
-        project = project_services.update_project(project_id, data, new_files)
+        collaborator_emails = data.getlist("collaborators")
+        project = project_services.update_project(project_id, dict(data), new_files, collaborator_emails)
 
         return jsonify({
             "success": True, 

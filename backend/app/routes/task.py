@@ -27,10 +27,14 @@ def create_task_route():
         collaborators = data.getlist("collaborators")
         notes = data.get("notes")
         priority = data.get("priority")
+        
+        # 1. Get the optional project_id from the form data
+        project_id = data.get("project_id")
 
         status_enum = TaskStatus(status)
         duedate = datetime.fromisoformat(duedate_str).date() if duedate_str else None
 
+        # 2. Pass the new 'project_id' argument to the service function
         task = task_services.create_task(
             title=title,
             description=description,
@@ -41,6 +45,7 @@ def create_task_route():
             attachments=files,
             notes=notes,
             priority=priority,
+            project_id=project_id # <-- This is the new argument
         )
 
         return jsonify({
@@ -97,6 +102,38 @@ def get_project_tasks_route(project_id):
         data = [task.to_dict() for task in tasks]
         return jsonify(data), 200
     
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+# 3. Add the new route to get tasks not assigned to a project
+@task_bp.route("/get-unassigned-tasks", methods=["GET"])
+@jwt_required()
+def get_unassigned_tasks_route():
+    try:
+        tasks = task_services.get_unassigned_tasks() or []
+        data = [t.to_dict() for t in tasks]
+        return jsonify(data), 200
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+# 4. Add the new route to link an existing task to a project
+@task_bp.route("/link-task", methods=["POST"])
+@jwt_required()
+def link_task_route():
+    data = request.get_json()
+    task_id = data.get("task_id")
+    project_id = data.get("project_id")
+
+    if not task_id or not project_id:
+        return jsonify({"success": False, "error": "Task ID and Project ID are required."}), 400
+
+    try:
+        task = task_services.link_task_to_project(task_id, project_id)
+        return jsonify({
+            "success": True,
+            "task": task.to_dict(),
+            "message": "Task linked successfully."
+        }), 200
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 

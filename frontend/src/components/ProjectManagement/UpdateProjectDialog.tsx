@@ -74,7 +74,7 @@ export default function UpdateProjectDialog({ isOpen, setIsOpen, project, curren
             status: project.status,
             owner: project.owner_email,
             collaborators: project.collaborators?.map(c => c.email) || [],
-            notes: project.notes || "", // <-- 3. Initialize notes in the form
+            notes: project.notes || "",
             attachments: project.attachments || [],
         });
     }
@@ -88,7 +88,7 @@ export default function UpdateProjectDialog({ isOpen, setIsOpen, project, curren
     if (values.deadline) formData.append("deadline", values.deadline.toISOString());
     formData.append("status", values.status);
     formData.append("owner", values.owner);
-    formData.append("notes", values.notes || ""); // <-- 4. Add notes to the form data
+    formData.append("notes", values.notes || ""); 
     
     values.collaborators?.forEach(c => formData.append("collaborators", c));
 
