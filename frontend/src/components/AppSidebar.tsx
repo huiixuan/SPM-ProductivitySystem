@@ -12,13 +12,18 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
-import { Home, LayoutList, CalendarCheck2, LogOut } from "lucide-react"
+import { Home, LayoutList, CalendarCheck2, LogOut, FolderKanban } from "lucide-react"
 
 const items = [
   {
     title: "Home",
     url: "/HomePage",
     icon: Home
+  },
+  {
+    title: "Projects",
+    url: "/projects", // You can change this URL to your desired projects page
+    icon: FolderKanban
   },
   {
     title: "Task Overview",

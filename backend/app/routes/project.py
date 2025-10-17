@@ -1,142 +1,96 @@
-import os
-import uuid
+from flask import Blueprint, jsonify, request
+from app.services import project_services
+from app.models import ProjectStatus
 from datetime import datetime
-from functools import wraps
-
-from flask import Blueprint, request, jsonify, current_app
+from sqlalchemy.exc import SQLAlchemyError
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from werkzeug.utils import secure_filename
-
-# ✅ Import UserRole if your User model uses it for the 'role' attribute
-from ..models import db, User, Project, ProjectStatus, UserRole
+import traceback # Helpful for debugging
 
 project_bp = Blueprint("project", __name__)
 
-ALLOWED_ROLES = {"manager", "director"}
-ALLOWED_MIMETYPES = {"application/pdf"}
-
-# --- CORS is now handled globally in __init__.py, so all local CORS code has been removed ---
-
-
-def role_required(allowed_roles):
-    """Decorator to ensure user has one of the allowed roles."""
-    def decorator(fn):
-        @wraps(fn)
-        def wrapper(*args, **kwargs):
-            try:
-                # ✅ CORRECT: Get user ID (string) from token and convert to integer
-                user_id_str = get_jwt_identity()
-                user_id = int(user_id_str)
-                user = db.session.get(User, user_id)
-            except (ValueError, TypeError):
-                return jsonify({"error": "Invalid token identity"}), 401
-
-            if not user:
-                return jsonify({"error": "User not found"}), 404
-            
-            # Check if the user's role (e.g., "manager") is in the allowed set
-            if user.role.value.lower() not in allowed_roles:
-                return jsonify({"error": "Forbidden: Insufficient role"}), 403
-            
-            # Attach user to the request context for easy access in the route
-            request.current_user = user
-            return fn(*args, **kwargs)
-        return wrapper
-    return decorator
-
-
-def _save_pdf(file_storage):
-    """Helper function to validate and save a PDF file."""
-    if not file_storage:
-        return None
-    if file_storage.mimetype not in ALLOWED_MIMETYPES:
-        raise ValueError("Only PDF files are allowed.")
-    
-    fname = secure_filename(file_storage.filename or "attachment.pdf")
-    if not fname.lower().endswith(".pdf"):
-        fname += ".pdf"
-        
-    new_name = f"{uuid.uuid4().hex}_{fname}"
-    upload_folder = current_app.config.get("UPLOAD_FOLDER", "uploads")
-    path = os.path.join(upload_folder, new_name)
-    os.makedirs(upload_folder, exist_ok=True)
-    file_storage.save(path)
-    return path
-
-
-# --- Create project ---
-@project_bp.route("", methods=["POST"])
+@project_bp.route("/create-project", methods=["POST"])
 @jwt_required()
-@role_required(ALLOWED_ROLES)
-def create_project():
-    # 'request.current_user' is now available thanks to the decorator
-    owner = request.current_user
-
-    # ... (rest of the function remains the same)
-    name = (request.form.get("name") or "").strip()
-    if not name:
-        return jsonify({"error": "Project name is required"}), 400
-
-    description = request.form.get("description", "")
-    status_raw = request.form.get("status", "Not Started").strip()
-    deadline_raw = request.form.get("deadline")
-    collaborators_raw = request.form.get("collaborators", "")
-    attachment_file = request.files.get("attachment")
-
+def create_project_route():
+    data = request.form
+    files = request.files.getlist("attachments")
+    
     try:
-        status_enum = ProjectStatus(status_raw)
-        deadline = datetime.fromisoformat(deadline_raw) if deadline_raw else None
-        attachment_path = _save_pdf(attachment_file)
-    except ValueError as e:
-        return jsonify({"error": str(e)}), 400
-
-    project = Project(
-        name=name,
-        description=description,
-        deadline=deadline,
-        status=status_enum,
-        attachment_path=attachment_path,
-        owner_id=owner.id,
-    )
-
-    if collaborators_raw:
-        collaborator_emails = {e.strip() for e in collaborators_raw.split(',') if e.strip()}
-        users = db.session.query(User).filter(User.email.in_(collaborator_emails)).all()
+        name = data.get("name")
+        description = data.get("description")
+        deadline_str = data.get("deadline")
+        status = data.get("status")
+        owner_email = data.get("owner")
+        collaborator_emails = data.getlist("collaborators")
         
-        found_emails = {u.email for u in users}
-        missing_emails = collaborator_emails - found_emails
-        if missing_emails:
-            return jsonify({"error": "Collaborator emails not found", "missing": list(missing_emails)}), 404
-        
-        project.collaborators = users
+        # --- FIX STEP 1: Get 'notes' from the form data ---
+        notes = data.get("notes")
 
-    db.session.add(project)
-    db.session.commit()
-    return jsonify({"message": "Project created successfully", "project": project.to_dict()}), 201
+        status_enum = ProjectStatus(status) if status else ProjectStatus.NOT_STARTED
+        deadline = datetime.fromisoformat(deadline_str).date() if deadline_str else None
 
+        # --- FIX STEP 2: Pass 'notes' into the function call ---
+        project = project_services.create_project(
+            name=name,
+            description=description,
+            deadline=deadline,
+            status=status_enum,
+            owner_email=owner_email,
+            collaborator_emails=collaborator_emails,
+            attachments=files,
+            notes=notes  # <--- This argument was missing
+        )
 
-# --- List projects ---
-@project_bp.route("", methods=["GET"])
+        return jsonify({
+            "success": True,
+            "project_id": project.id,
+            "message": "Project created successfully."
+        }), 201
+
+    except Exception as e:
+        print(f"Error in create_project_route: {e}")
+        traceback.print_exc()
+        return jsonify({"success": False, "error": str(e)}), 500
+
+# ... (The rest of your project.py file is likely correct, but ensure it matches below) ...
+
+@project_bp.route("/get-all-projects", methods=["GET"])
 @jwt_required()
-def list_projects():
+def get_all_projects_route():
     try:
-        
-        user_id_str = get_jwt_identity()
-        user_id = int(user_id_str)
-        user = db.session.get(User, user_id)
-    except (ValueError, TypeError):
-        return jsonify({"error": "Invalid token identity"}), 401
+        projects = project_services.get_all_projects() or []
+        data = [p.to_dict() for p in projects]
+        return jsonify(data), 200
+    except Exception as e:
+        print(f"Error in get_all_projects_route: {e}")
+        traceback.print_exc()
+        return jsonify({"success": False, "error": str(e)}), 500
 
-    if not user:
-        return jsonify({"error": "User not found"}), 404
+@project_bp.route("/get-project/<int:project_id>", methods=["GET"])
+@jwt_required()
+def get_project_route(project_id):
+    try:
+        project = project_services.get_project_by_id(project_id)
+        return jsonify(project.to_dict()), 200
+    except Exception as e:
+        print(f"Error in get_project_route for ID {project_id}: {e}")
+        traceback.print_exc()
+        return jsonify({"success": False, "error": str(e)}), 500
 
-    # Find projects where the user is the owner
-    owned_projects = db.session.query(Project).filter(Project.owner_id == user.id)
-    
-    # Find projects where the user is a collaborator
-    collab_projects = db.session.query(Project).join(Project.collaborators).filter(User.id == user.id)
+@project_bp.route("/update-project/<int:project_id>", methods=["PUT"])
+@jwt_required()
+def update_project_route(project_id):
+    try:
+        data = dict(request.form)
+        new_files = request.files.getlist("attachments")
 
-    # Combine, remove duplicates, order, and execute the query
-    all_projects = owned_projects.union(collab_projects).order_by(Project.created_at.desc()).all()
-    
-    return jsonify({"projects": [p.to_dict() for p in all_projects]}), 200
+        project = project_services.update_project(project_id, data, new_files)
+
+        return jsonify({
+            "success": True, 
+            "project": project.to_dict(),
+            "message": "Project updated successfully."
+        }), 200
+    except Exception as e:
+        print(f"Error in update_project_route for ID {project_id}: {e}")
+        traceback.print_exc()
+        return jsonify({"success": False, "error": str(e)}), 500

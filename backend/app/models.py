@@ -120,6 +120,9 @@ class Attachment(db.Model):
 
     task_id = db.Column(db.Integer, db.ForeignKey("tasks.id"), nullable=False)
     task = relationship("Task", back_populates="attachments")
+    
+    project_id = db.Column(db.Integer, db.ForeignKey("projects.id"))
+    project = relationship("Project", back_populates="attachments")
 
 class Project(db.Model):
     __tablename__ = "projects"
@@ -130,6 +133,10 @@ class Project(db.Model):
     deadline = db.Column(db.Date)
     status = db.Column(db.Enum(ProjectStatus, native_enum=False), default=ProjectStatus.NOT_STARTED)
     attachment_path = db.Column(db.String(255))
+    notes = db.Column(db.Text)
+    
+    attachments = relationship("Attachment", back_populates="project", cascade="all, delete-orphan")
+    
 
     owner_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
     owner = relationship("User", back_populates="owned_projects")
@@ -155,4 +162,5 @@ class Project(db.Model):
             "owner_id": self.owner_id,
             "collaborators": [c.email for c in self.collaborators],
             "created_at": self.created_at.isoformat() if self.created_at else None,
+            "notes": self.notes,
         }
