@@ -4,6 +4,7 @@ from app.services.user_services import get_user_by_email
 from app.models import TaskStatus
 from sqlalchemy.exc import SQLAlchemyError
 from datetime import datetime
+from app.services import notification_service
 
 # 2. Add project_id as an optional argument
 def create_task(title, description, duedate, status, owner_email, collaborator_emails, attachments, notes, priority, project_id=None):
@@ -34,6 +35,7 @@ def create_task(title, description, duedate, status, owner_email, collaborator_e
 
         db.session.add(task)
         db.session.commit()
+        notification_service.create_notifications_for_task(task)
 
         return task
     
@@ -169,6 +171,27 @@ def update_task(task_id, data, new_files):
                 db.session.add(attachment)
 
         db.session.commit()
+
+        try:
+            db.session.refresh(task)
+
+            if task.status == TaskStatus.COMPLETED:
+                notification_service.remove_notifications_for_task(task)
+            else:
+                if duedata := data.get("duedate"):
+                    try:
+                        new_duedate = datetime.fromisoformat(duedate.replace('Z', '+00:00')).date()
+                    except ValueError:
+                        new_duedate = task.duedate
+
+                    if new_duedate != task.duedate:
+                        notification_service.update_notifications_for_task(task)
+                else:
+                    notification_service.update_notifications_for_task(task)
+        except Exception as notif_err:
+            print(f"Notification update error: {notif_err}")
+
+
         return task
     
     except SQLAlchemyError as e:
