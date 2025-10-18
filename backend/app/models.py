@@ -3,6 +3,10 @@ from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from werkzeug.security import generate_password_hash, check_password_hash
 import enum
+from sqlalchemy.dialects.postgresql import JSONB
+from datetime import datetime, date
+from sqlalchemy import UniqueConstraint, Index
+from sqlalchemy.dialects.postgresql import ENUM
 
 db = SQLAlchemy()
 
@@ -52,6 +56,13 @@ class User(db.Model):
     owned_projects = relationship("Project", back_populates="owner")
     projects = relationship("Project", secondary=project_collaborators, back_populates="collaborators")
 
+    notifications = relationship(
+    "Notification",
+    back_populates="user",
+    cascade="all, delete-orphan",
+    passive_deletes=True,
+)
+
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
 
@@ -85,6 +96,14 @@ class Task(db.Model):
     attachments = relationship(
         "Attachment", back_populates="task", cascade="all, delete-orphan"
     )
+
+    notifications = relationship(
+    "Notification",
+    back_populates="task",
+    cascade="all, delete-orphan",
+    passive_deletes=True,
+)
+
 
     parent_id = db.Column(db.Integer, db.ForeignKey("tasks.id"), nullable=True)
     subtasks = relationship("Task", backref=db.backref("parent", remote_side=[id]), cascade="all, delete-orphan")
@@ -165,3 +184,44 @@ class Project(db.Model):
             
             "collaborators": [{"id": c.id, "email": c.email} for c in self.collaborators],
         }
+
+class Notification(db.Model):
+    __tablename__ = "notifications"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    task_id = db.Column(db.Integer, db.ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False)
+
+    payload = db.Column(
+        JSONB,
+        nullable=False,
+        default=dict,  # {"project_name": ..., "task_title": ..., "duedate": ...}
+    )
+
+    trigger_days_before = db.Column(db.Integer, nullable=False)
+    created_at = db.Column(db.DateTime(timezone=True), default=datetime.utcnow)
+    is_read = db.Column(db.Boolean, nullable=False, default=False)
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "task_id", "trigger_days_before", name="uq_notification_unique_trigger"),
+        Index("ix_notification_user_isread_created", "user_id", "is_read", "created_at"),
+    )
+
+    user = db.relationship("User", back_populates="notifications")
+    task = db.relationship("Task", back_populates="notifications")
+
+    @staticmethod
+    def build_payload(project_name: str, task_title: str, duedate: date):
+        return {
+            "project_name": project_name,
+            "task_title": task_title,
+            "duedate": duedate.isoformat() if duedate else None,
+        }
+
+    @property
+    def message(self):
+        p = self.payload or {}
+        pn = p.get("project_name", "Project")
+        tt = p.get("task_title", "Task")
+        dd = p.get("duedate", "")
+        return f"{pn}: '{tt}' is due on {dd} (in {self.trigger_days_before} day(s))."

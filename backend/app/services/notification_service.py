@@ -17,10 +17,29 @@ def create_notifications_for_task(task: Task):
     if task.status == TaskStatus.COMPLETED:
         return
 
+    today = date.today()
+    remaining_days = (task.duedate - today).days
+    # Only create all notifications if the task is still at least 7 days away
+    if remaining_days >= 7:
+        valid_triggers = [7, 3, 1]
+    elif remaining_days >= 3:
+        valid_triggers = [3, 1]
+    elif remaining_days >= 1:
+        valid_triggers = [1]
+    else:
+        valid_triggers = []
+
+
     users_to_notify = {task.owner} | set(task.collaborators or [])
 
     for user in users_to_notify:
-        for days_before in TRIGGER_DAYS:
+        for days_before in valid_triggers:
+            notif_date = task.duedate - timedelta(days=days_before)
+            if remaining_days < days_before:
+                continue
+            if notif_date < today:
+                continue
+            
             # Build payload
             payload = Notification.build_payload(
                 project_name=task.project.name if task.project else "No Project",
@@ -46,7 +65,7 @@ def create_notifications_for_task(task: Task):
     
     db.session.commit()
 
-    print(f"✅ Created notifications for task '{task.title}':")
+    print(f"Created notifications for task '{task.title}':")
     for n in Notification.query.filter_by(task_id=task.id).all():
         print(f"  - User {n.user_id} | {n.payload}")
 
