@@ -3,6 +3,8 @@ from app.services import task_services
 from app.models import TaskStatus
 from datetime import datetime
 from sqlalchemy.exc import SQLAlchemyError
+from app.models import db, User, Task
+
 import traceback
 from flask_jwt_extended import jwt_required, get_jwt_identity
 
@@ -169,7 +171,6 @@ def get_user_tasks():
         if not user:
             return jsonify({"error": "User not found"}), 404
 
-        # Get tasks where user is owner
         user_tasks = Task.query.filter(Task.owner_id == user_id).all()
         
         tasks_list = []
