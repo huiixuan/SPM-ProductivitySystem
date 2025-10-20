@@ -20,20 +20,20 @@ def get_personal_calendar():
 
         events = []
 
-        # Get user's projects
         user_projects = Project.query.filter(
             (Project.owner_id == user_id) | (Project.collaborators.any(User.id == user_id))
         ).all()
 
-        # Get user's tasks
-        user_tasks = Task.query.filter(Task.owner_id == user_id).all()
+  
+        user_tasks = Task.query.filter(
+            (Task.owner_id == user_id) | (Task.collaborators.any(User.id == user_id))
+        ).all()
 
-        now = date.today()  # Use date.today() instead of datetime.now().date()
+        now = date.today()
         
-        # Process projects
+
         for project in user_projects:
             if project.deadline:
-                # Fix status calculation logic - overdue has highest priority
                 if project.deadline < now and project.status != ProjectStatus.COMPLETED:
                     status = "overdue"
                 elif project.status == ProjectStatus.COMPLETED:
@@ -54,10 +54,9 @@ def get_personal_calendar():
                     "deadline": project.deadline.isoformat(),
                 })
 
-        # Process tasks
+
         for task in user_tasks:
             if task.duedate:
-                # Fix status calculation logic for tasks - overdue has highest priority
                 if task.duedate < now and task.status != TaskStatus.COMPLETED:
                     status = "overdue"
                 elif task.status == TaskStatus.COMPLETED:
@@ -95,28 +94,42 @@ def get_team_calendar():
         if not current_user:
             return jsonify({"error": "User not found"}), 404
 
-        # Get all projects the current user has access to
+  
         user_projects = Project.query.filter(
             (Project.owner_id == user_id) | (Project.collaborators.any(User.id == user_id))
         ).all()
 
-        # Get all tasks for team members (users in the same projects)
+    
         team_member_ids = set()
+        
+
         for project in user_projects:
             team_member_ids.add(project.owner_id)
             for collaborator in project.collaborators:
                 team_member_ids.add(collaborator.id)
+        
+  
+        user_tasks = Task.query.filter(
+            (Task.owner_id == user_id) | (Task.collaborators.any(User.id == user_id))
+        ).all()
+        
+        for task in user_tasks:
+            team_member_ids.add(task.owner_id)
+            for collaborator in task.collaborators:
+                team_member_ids.add(collaborator.id)
 
-        # Get tasks for all team members
-        team_tasks = Task.query.filter(Task.owner_id.in_(team_member_ids)).all()
+     
+        team_tasks = Task.query.filter(
+            (Task.owner_id.in_(list(team_member_ids))) | 
+            (Task.collaborators.any(User.id.in_(list(team_member_ids))))
+        ).all()
 
         events = []
         now = date.today()
 
-        # Process projects
+    
         for project in user_projects:
             if project.deadline:
-                # Fix status calculation logic - overdue has highest priority
                 if project.deadline < now and project.status != ProjectStatus.COMPLETED:
                     status = "overdue"
                 elif project.status == ProjectStatus.COMPLETED:
@@ -126,7 +139,6 @@ def get_team_calendar():
                 else:
                     status = "upcoming"
                 
-                # Get project owner email
                 owner = db.session.get(User, project.owner_id)
                 owner_email = owner.email if owner else "Unknown"
                 
@@ -142,10 +154,9 @@ def get_team_calendar():
                     "assigneeEmail": owner_email,
                 })
 
-        # Process tasks for team members
+        
         for task in team_tasks:
             if task.duedate:
-                # Fix status calculation logic for tasks - overdue has highest priority
                 if task.duedate < now and task.status != TaskStatus.COMPLETED:
                     status = "overdue"
                 elif task.status == TaskStatus.COMPLETED:
@@ -155,9 +166,12 @@ def get_team_calendar():
                 else:
                     status = "upcoming"
                 
-                # Get task owner
+                
                 owner = db.session.get(User, task.owner_id)
                 owner_email = owner.email if owner else "Unknown"
+                
+              
+                collaborator_emails = [collab.email for collab in task.collaborators]
                 
                 events.append({
                     "id": f"task-{task.id}",
@@ -169,6 +183,7 @@ def get_team_calendar():
                     "status": status,
                     "assignee": owner.name if owner else "Unknown",
                     "assigneeEmail": owner_email,
+                    "collaborators": collaborator_emails  
                 })
 
         return jsonify({"events": events}), 200
@@ -188,33 +203,32 @@ def get_workload_data():
         if not current_user:
             return jsonify({"error": "User not found"}), 404
 
-        # Get all users
+
         all_users = User.query.all()
         
         workload_data = []
         now = date.today()
         
         for user in all_users:
-            # Count active tasks (not completed) where user is owner
             active_tasks_count = Task.query.filter(
-                Task.owner_id == user.id,
+                (Task.owner_id == user.id) | (Task.collaborators.any(User.id == user.id)),
                 Task.status != TaskStatus.COMPLETED
             ).count()
             
-            # Count overdue tasks
+
             overdue_tasks_count = Task.query.filter(
-                Task.owner_id == user.id,
+                ((Task.owner_id == user.id) | (Task.collaborators.any(User.id == user.id))),
                 Task.status != TaskStatus.COMPLETED,
                 Task.duedate < now
             ).count()
             
-            # Count active projects (not completed) where user is owner or collaborator
+
             active_projects_count = Project.query.filter(
                 (Project.owner_id == user.id) | (Project.collaborators.any(User.id == user.id)),
                 Project.status != ProjectStatus.COMPLETED
             ).count()
             
-            # Calculate workload score (tasks + projects, with overdue tasks weighted higher)
+
             total_workload = active_tasks_count + active_projects_count + (overdue_tasks_count * 0.5)
             
             workload_data.append({
@@ -249,7 +263,7 @@ def debug_status_calculation():
             "projects": []
         }
 
-        # Get user's tasks
+
         user_tasks = Task.query.filter(Task.owner_id == user_id).all()
         for task in user_tasks:
             task_info = {

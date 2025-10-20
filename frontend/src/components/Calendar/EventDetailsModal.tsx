@@ -9,6 +9,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Calendar, Clock, User, FileText, AlertTriangle } from "lucide-react";
+// Remove the unused cn import
 
 type CalendarEvent = {
     id: number;
@@ -20,6 +21,7 @@ type CalendarEvent = {
     assignee?: string;
     assigneeEmail?: string;
     description?: string;
+    collaborators?: string[];
 };
 
 interface EventDetailsModalProps {
@@ -33,10 +35,17 @@ export default function EventDetailsModal({ event, isOpen, onClose }: EventDetai
 
     const getStatusColor = (status: string) => {
         switch (status) {
-            case 'overdue': return 'destructive';
+            case 'overdue': return 'outline';
             case 'ongoing': return 'default';
             case 'completed': return 'secondary';
             default: return 'outline';
+        }
+    };
+
+    const getStatusClassName = (status: string) => {
+        switch (status) {
+            case 'overdue': return 'bg-red-100 text-black border-red-300 hover:bg-red-200';
+            default: return '';
         }
     };
 
@@ -56,7 +65,10 @@ export default function EventDetailsModal({ event, isOpen, onClose }: EventDetai
 
                 <div className="space-y-4">
                     <div className="flex items-center gap-2">
-                        <Badge variant={getStatusColor(event.status)}>
+                        <Badge
+                            variant={getStatusColor(event.status)}
+                            className={getStatusClassName(event.status)}
+                        >
                             {getStatusIcon(event.status)}
                             {event.status}
                         </Badge>

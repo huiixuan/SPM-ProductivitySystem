@@ -11,6 +11,7 @@ import MonthlyCalendarView from "@/components/Calendar/MonthlyCalendarView";
 import WeeklyCalendarView from "@/components/Calendar/WeeklyCalendarView";
 import DailyCalendarView from "@/components/Calendar/DailyCalendarView";
 import EventDetailsModal from "@/components/Calendar/EventDetailsModal";
+import { cn } from "@/lib/utils";
 
 type CalendarEvent = {
     id: number;
@@ -22,6 +23,7 @@ type CalendarEvent = {
     assignee?: string;
     assigneeEmail?: string;
     description?: string;
+    collaborators?: string[];
 };
 
 type ApiCalendarEvent = Omit<CalendarEvent, 'start' | 'end'> & { start: string; end: string };
@@ -42,7 +44,6 @@ type UserData = {
     role: string;
 };
 
-// Define type for basic team member data from API
 type BasicTeamMember = {
     id: number;
     name: string;
@@ -50,15 +51,13 @@ type BasicTeamMember = {
     role: string;
 };
 
-// Helper function to enhance events with overdue status
 const enhanceEventWithOverdueStatus = (event: ApiCalendarEvent): CalendarEvent => {
     const start = new Date(event.start);
     const end = new Date(event.end);
 
-    // If backend status is not overdue but due date has passed, mark as overdue
     let status = event.status;
     const today = new Date();
-    today.setHours(0, 0, 0, 0); // Set to beginning of day for accurate comparison
+    today.setHours(0, 0, 0, 0);
 
     if (status !== 'completed' && start < today && status !== 'overdue') {
         status = 'overdue';
@@ -153,7 +152,6 @@ export default function SchedulePage() {
                 setTeamMembers(workloadData.team_members);
             }
 
-            // Fallback if workload endpoint fails but team members works
             if (teamMembersRes.ok) {
                 const teamMembersData = await teamMembersRes.json();
                 if (teamMembers.length === 0) {
@@ -177,7 +175,6 @@ export default function SchedulePage() {
         fetchCalendarData();
     }, [fetchCurrentUser, fetchCalendarData]);
 
-    // Auto-refresh data every 30 seconds
     useEffect(() => {
         const interval = setInterval(() => {
             fetchCalendarData();
@@ -212,34 +209,50 @@ export default function SchedulePage() {
         setCurrentDate(new Date());
     };
 
-    const filteredTeamEvents = selectedMember === 'all'
-        ? teamEvents
-        : teamEvents.filter(event => event.assigneeEmail === selectedMember);
-
-    const currentEvents = activeTab === 'personal' ? personalEvents : filteredTeamEvents;
-
     const getStatusColor = (status: string) => {
         switch (status) {
-            case 'overdue': return 'black';
+            case 'overdue': return 'outline';
             case 'ongoing': return 'default';
             case 'completed': return 'secondary';
             default: return 'outline';
         }
     };
 
-    const getWorkloadLevel = (count: number) => {
-        if (count <= 2) return 'low';
-        if (count <= 5) return 'medium';
-        return 'high';
-    };
-
-    const getWorkloadVariant = (level: string) => {
-        switch (level) {
-            case 'high': return 'black';
-            case 'medium': return 'default';
-            default: return 'secondary';
+    const getStatusClassName = (status: string) => {
+        switch (status) {
+            case 'overdue': return 'bg-red-100 text-black border-red-300 hover:bg-red-200';
+            default: return '';
         }
     };
+
+    const getWorkloadVariant = (): "outline" => {
+        return 'outline';
+    };
+
+    const getWorkloadClassName = (level: string) => {
+        switch (level) {
+            case 'high': return 'bg-red-100 text-black border-red-300 hover:bg-red-200';
+            case 'medium': return 'bg-yellow-100 text-black border-yellow-300 hover:bg-yellow-200';
+            case 'low': return 'bg-green-100 text-black border-green-300 hover:bg-green-200';
+            default: return '';
+        }
+    };
+
+    const filteredTeamEvents = selectedMember === 'all'
+        ? teamEvents
+        : teamEvents.filter(event => {
+            if (event.type === 'project') {
+                return event.assigneeEmail === selectedMember;
+            }
+            else if (event.type === 'task') {
+                const isAssignee = event.assigneeEmail === selectedMember;
+                const isCollaborator = event.collaborators?.includes(selectedMember);
+                return isAssignee || isCollaborator;
+            }
+            return false;
+        });
+
+    const currentEvents = activeTab === 'personal' ? personalEvents : filteredTeamEvents;
 
     const overdueCount = personalEvents.filter(event => event.status === 'overdue').length;
     const upcomingCount = personalEvents.filter(event => event.status === 'upcoming').length;
@@ -300,7 +313,14 @@ export default function SchedulePage() {
                                 >
                                     Refresh Data
                                 </Button>
-                                {overdueCount > 0 && <Badge variant="destructive">{overdueCount} overdue</Badge>}
+                                {overdueCount > 0 && (
+                                    <Badge
+                                        variant={getStatusColor('overdue')}
+                                        className={getStatusClassName('overdue')}
+                                    >
+                                        {overdueCount} overdue
+                                    </Badge>
+                                )}
                                 {ongoingCount > 0 && <Badge variant="default">{ongoingCount} ongoing</Badge>}
                                 {upcomingCount > 0 && <Badge variant="outline">{upcomingCount} upcoming</Badge>}
                             </div>
@@ -388,12 +408,15 @@ export default function SchedulePage() {
                             {teamMembers.length > 0 ? (
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                                     {teamMembers.map(member => {
-                                        const workloadLevel = getWorkloadLevel(member.workload);
+                                        const workloadLevel = member.workload <= 2 ? 'low' : member.workload <= 5 ? 'medium' : 'high';
                                         return (
                                             <div key={member.id} className="border rounded-lg p-4">
                                                 <div className="flex justify-between items-center mb-2">
                                                     <span className="font-medium">{member.name}</span>
-                                                    <Badge variant={getWorkloadVariant(workloadLevel)}>
+                                                    <Badge
+                                                        variant={getWorkloadVariant()}
+                                                        className={getWorkloadClassName(workloadLevel)}
+                                                    >
                                                         {member.workload} tasks
                                                     </Badge>
                                                 </div>
@@ -402,7 +425,7 @@ export default function SchedulePage() {
                                                 <div className="mt-2 w-full bg-gray-200 rounded-full h-2">
                                                     <div
                                                         className={`h-2 rounded-full ${workloadLevel === 'high' ? 'bg-red-500' :
-                                                                workloadLevel === 'medium' ? 'bg-yellow-500' : 'bg-green-500'
+                                                            workloadLevel === 'medium' ? 'bg-yellow-500' : 'bg-green-500'
                                                             }`}
                                                         style={{
                                                             width: `${Math.min(member.workload * 20, 100)}%`
@@ -470,8 +493,8 @@ export default function SchedulePage() {
                                 <div
                                     key={`${event.type}-${event.id}`}
                                     className={`flex items-center justify-between p-4 border rounded-lg transition-all duration-200 ${event.status === 'overdue'
-                                            ? 'bg-red-50 border-red-300 shadow-sm hover:bg-red-100'
-                                            : 'hover:bg-gray-50'
+                                        ? 'bg-red-50 border-red-300 shadow-sm hover:bg-red-100'
+                                        : 'hover:bg-gray-50'
                                         }`}
                                     onClick={() => handleEventSelect(event)}
                                 >
@@ -481,9 +504,13 @@ export default function SchedulePage() {
                                                 }`}>
                                                 {event.type === 'task' ? '📝' : '📁'} {event.title}
                                             </h4>
-                                            <Badge variant={getStatusColor(event.status)} className={
-                                                event.status === 'overdue' ? 'animate-pulse' : ''
-                                            }>
+                                            <Badge
+                                                variant={getStatusColor(event.status)}
+                                                className={cn(
+                                                    getStatusClassName(event.status),
+                                                    event.status === 'overdue' ? 'animate-pulse' : ''
+                                                )}
+                                            >
                                                 {event.status === 'overdue' ? '⚠️ ' : ''}{event.status}
                                             </Badge>
                                             <Badge variant="outline">{event.type}</Badge>
@@ -506,7 +533,6 @@ export default function SchedulePage() {
                                             </p>
                                         )}
 
-                                        {/* Overdue warning for tasks due today */}
                                         {event.status === 'overdue' && (
                                             <div className="flex items-center gap-1 mt-2 text-red-600 text-sm">
                                                 <span>⚠️ This item is overdue</span>

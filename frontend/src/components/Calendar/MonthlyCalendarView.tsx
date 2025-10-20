@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 type CalendarEvent = {
     id: number;
@@ -15,6 +16,7 @@ type CalendarEvent = {
     assignee?: string;
     assigneeEmail?: string;
     description?: string;
+    collaborators?: string[];
 };
 
 interface MonthlyCalendarViewProps {
@@ -52,10 +54,17 @@ export default function MonthlyCalendarView({
 
     const getStatusColor = (status: string) => {
         switch (status) {
-            case 'overdue': return 'black';
+            case 'overdue': return 'outline';
             case 'ongoing': return 'default';
             case 'completed': return 'secondary';
             default: return 'outline';
+        }
+    };
+
+    const getStatusClassName = (status: string) => {
+        switch (status) {
+            case 'overdue': return 'bg-red-100 text-black border-red-300 hover:bg-red-200';
+            default: return '';
         }
     };
 
@@ -145,8 +154,11 @@ export default function MonthlyCalendarView({
                                             </div>
                                             <Badge
                                                 variant={getStatusColor(calEvent.status)}
-                                                className={`mt-1 text-xs ${calEvent.status === 'overdue' ? 'animate-pulse' : ''
-                                                    }`}
+                                                className={cn(
+                                                    getStatusClassName(calEvent.status),
+                                                    "mt-1 text-xs",
+                                                    calEvent.status === 'overdue' ? 'animate-pulse' : ''
+                                                )}
                                             >
                                                 {calEvent.status === 'overdue' ? '⚠️ ' : ''}{calEvent.status}
                                             </Badge>
