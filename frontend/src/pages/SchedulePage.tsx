@@ -220,7 +220,7 @@ export default function SchedulePage() {
 
     const getStatusColor = (status: string) => {
         switch (status) {
-            case 'overdue': return 'destructive';
+            case 'overdue': return 'black';
             case 'ongoing': return 'default';
             case 'completed': return 'secondary';
             default: return 'outline';
@@ -235,7 +235,7 @@ export default function SchedulePage() {
 
     const getWorkloadVariant = (level: string) => {
         switch (level) {
-            case 'high': return 'destructive';
+            case 'high': return 'black';
             case 'medium': return 'default';
             default: return 'secondary';
         }
