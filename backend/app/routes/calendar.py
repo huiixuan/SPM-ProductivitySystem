@@ -191,30 +191,34 @@ def get_workload_data():
             # Count active tasks (not completed) where user is owner
             active_tasks_count = Task.query.filter(
                 Task.owner_id == user.id,
-                Task.status != 'Completed'
+                Task.status != TaskStatus.COMPLETED
+            ).count()
+            
+            # Count overdue tasks
+            overdue_tasks_count = Task.query.filter(
+                Task.owner_id == user.id,
+                Task.status != TaskStatus.COMPLETED,
+                Task.duedate < now
             ).count()
             
             # Count active projects (not completed) where user is owner or collaborator
             active_projects_count = Project.query.filter(
                 (Project.owner_id == user.id) | (Project.collaborators.any(User.id == user.id)),
-                Project.status != 'Completed'
+                Project.status != ProjectStatus.COMPLETED
             ).count()
             
-            # DEBUG: Let's see what's being counted
-            print(f"User {user.email}: {active_tasks_count} tasks, {active_projects_count} projects")
-            
-            # For workload, we might want to count tasks + projects, or just tasks
-            # Let's use just tasks for now to match your expectation
-            total_workload = active_tasks_count
+            # Calculate workload score (tasks + projects, with overdue tasks weighted higher)
+            total_workload = active_tasks_count + active_projects_count + (overdue_tasks_count * 0.5)
             
             workload_data.append({
                 "id": user.id,
                 "name": user.name,
                 "email": user.email,
                 "role": user.role.value,
-                "workload": total_workload,  # Only tasks for workload
+                "workload": int(total_workload),
                 "task_count": active_tasks_count,
-                "project_count": active_projects_count
+                "project_count": active_projects_count,
+                "overdue_count": overdue_tasks_count
             })
         
         return jsonify({"team_members": workload_data}), 200

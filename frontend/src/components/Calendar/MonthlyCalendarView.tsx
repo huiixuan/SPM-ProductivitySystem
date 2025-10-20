@@ -1,6 +1,5 @@
 ﻿"use client";
 
-import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -18,13 +17,21 @@ type CalendarEvent = {
     description?: string;
 };
 
-interface SimpleCalendarGridProps {
+interface MonthlyCalendarViewProps {
     events: CalendarEvent[];
+    currentDate: Date;
+    onNavigate: (direction: 'prev' | 'next') => void;
     onSelectEvent?: (event: CalendarEvent) => void;
+    onGoToToday: () => void;
 }
 
-export default function SimpleCalendarGrid({ events, onSelectEvent }: SimpleCalendarGridProps) {
-    const [currentDate, setCurrentDate] = useState(new Date());
+export default function MonthlyCalendarView({
+    events,
+    currentDate,
+    onNavigate,
+    onSelectEvent,
+    onGoToToday
+}: MonthlyCalendarViewProps) {
 
     const getDaysInMonth = (date: Date) => {
         return new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
@@ -34,23 +41,9 @@ export default function SimpleCalendarGrid({ events, onSelectEvent }: SimpleCale
         return new Date(date.getFullYear(), date.getMonth(), 1).getDay();
     };
 
-    const navigateMonth = (direction: 'prev' | 'next') => {
-        const newDate = new Date(currentDate);
-        newDate.setMonth(currentDate.getMonth() + (direction === 'next' ? 1 : -1));
-        setCurrentDate(newDate);
-    };
-
-    const goToToday = () => {
-        setCurrentDate(new Date());
-    };
-
-    const daysInMonth = getDaysInMonth(currentDate);
-    const firstDay = getFirstDayOfMonth(currentDate);
-    const monthName = currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-
     const getEventsForDay = (day: number) => {
-        return events.filter(event => {
-            const eventDate = new Date(event.start);
+        return events.filter(calEvent => {
+            const eventDate = new Date(calEvent.start);
             return eventDate.getDate() === day &&
                 eventDate.getMonth() === currentDate.getMonth() &&
                 eventDate.getFullYear() === currentDate.getFullYear();
@@ -66,30 +59,40 @@ export default function SimpleCalendarGrid({ events, onSelectEvent }: SimpleCale
         }
     };
 
+    const getStatusBorderColor = (status: string) => {
+        switch (status) {
+            case 'overdue': return '#ef4444';
+            case 'ongoing': return '#3b82f6';
+            case 'completed': return '#6b7280';
+            default: return '#10b981';
+        }
+    };
+
+    const daysInMonth = getDaysInMonth(currentDate);
+    const firstDay = getFirstDayOfMonth(currentDate);
+    const monthName = currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+
     return (
         <Card>
             <CardHeader>
                 <div className="flex items-center justify-between">
-                    <CardTitle>Calendar View</CardTitle>
+                    <CardTitle>Monthly View - {monthName}</CardTitle>
                     <div className="flex items-center gap-2">
-                        <Button variant="outline" size="sm" onClick={goToToday}>
+                        <Button variant="outline" size="sm" onClick={onGoToToday}>
                             Today
                         </Button>
                         <div className="flex items-center">
                             <Button
                                 variant="ghost"
                                 size="sm"
-                                onClick={() => navigateMonth('prev')}
+                                onClick={() => onNavigate('prev')}
                             >
                                 <ChevronLeft className="h-4 w-4" />
                             </Button>
-                            <span className="mx-4 font-semibold min-w-[140px] text-center">
-                                {monthName}
-                            </span>
                             <Button
                                 variant="ghost"
                                 size="sm"
-                                onClick={() => navigateMonth('next')}
+                                onClick={() => onNavigate('next')}
                             >
                                 <ChevronRight className="h-4 w-4" />
                             </Button>
@@ -121,26 +124,25 @@ export default function SimpleCalendarGrid({ events, onSelectEvent }: SimpleCale
                                 className={`h-24 border rounded p-1 overflow-y-auto ${isToday ? 'bg-blue-50 border-blue-200' : 'bg-white'
                                     }`}
                             >
-                                <div className={`text-sm font-medium mb-1 ${isToday ? 'text-blue-600' : ''
-                                    }`}>
+                                <div className={`text-sm font-medium mb-1 ${isToday ? 'text-blue-600' : ''}`}>
                                     {day}
                                 </div>
                                 <div className="space-y-1">
-                                    {dayEvents.map(event => (
+                                    {dayEvents.map(calEvent => (
                                         <div
-                                            key={event.id}
-                                            className="text-xs p-1 rounded cursor-pointer hover:bg-gray-100"
-                                            onClick={() => onSelectEvent?.(event)}
-                                            title={`${event.title} - ${event.status}`}
+                                            key={calEvent.id}
+                                            className="text-xs p-1 rounded cursor-pointer hover:bg-gray-100 border-l-2"
+                                            style={{
+                                                borderLeftColor: getStatusBorderColor(calEvent.status)
+                                            }}
+                                            onClick={() => onSelectEvent?.(calEvent)}
+                                            title={`${calEvent.title} - ${calEvent.status}`}
                                         >
-                                            <Badge
-                                                variant={getStatusColor(event.status)}
-                                                className="w-full justify-start truncate"
-                                            >
-                                                <span className="mr-1">
-                                                    {event.type === 'task' ? '📝' : '📁'}
-                                                </span>
-                                                {event.title}
+                                            <div className="font-medium truncate">
+                                                {calEvent.type === 'task' ? '📝' : '📁'} {calEvent.title}
+                                            </div>
+                                            <Badge variant={getStatusColor(calEvent.status)} className="mt-1 text-xs">
+                                                {calEvent.status}
                                             </Badge>
                                         </div>
                                     ))}
@@ -152,19 +154,19 @@ export default function SimpleCalendarGrid({ events, onSelectEvent }: SimpleCale
 
                 <div className="mt-4 flex flex-wrap gap-4 text-xs">
                     <div className="flex items-center gap-1">
-                        <Badge variant="destructive" className="h-3 w-3 p-0" />
+                        <div className="h-3 w-3 bg-destructive rounded"></div>
                         <span>Overdue</span>
                     </div>
                     <div className="flex items-center gap-1">
-                        <Badge variant="default" className="h-3 w-3 p-0" />
+                        <div className="h-3 w-3 bg-blue-500 rounded"></div>
                         <span>Ongoing</span>
                     </div>
                     <div className="flex items-center gap-1">
-                        <Badge variant="secondary" className="h-3 w-3 p-0" />
+                        <div className="h-3 w-3 bg-gray-400 rounded"></div>
                         <span>Completed</span>
                     </div>
                     <div className="flex items-center gap-1">
-                        <Badge variant="outline" className="h-3 w-3 p-0" />
+                        <div className="h-3 w-3 bg-green-500 rounded"></div>
                         <span>Upcoming</span>
                     </div>
                 </div>

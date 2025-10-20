@@ -15,6 +15,7 @@ from .routes.project import project_bp
 from .routes.attachment import attachment_bp
 from .routes.calendar import calendar_bp
 from .routes.notifications import notifications_bp
+from .routes.team import team_bp
 
 migrate = Migrate()
 bcrypt = Bcrypt()
@@ -55,5 +56,5 @@ def create_app():
     app.register_blueprint(attachment_bp, url_prefix="/api/attachment")
     app.register_blueprint(calendar_bp, url_prefix="/api/calendar")
     app.register_blueprint(notifications_bp, url_prefix="/api/notifications")
-
+    app.register_blueprint(team_bp, url_prefix="/api/team")
     return app
