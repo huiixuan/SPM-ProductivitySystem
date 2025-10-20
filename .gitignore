@@ -6,6 +6,9 @@
 __pycache__/
 *.pyc
 
+# Pytest caches
+.pytest_cache/
+
 # Environment files
 *.env
 
