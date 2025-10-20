@@ -1,12 +1,11 @@
 import json
-from app.models import db, Task, Attachment, User, Project # 1. Import Project
+from app.models import db, Task, Attachment, User, Project
 from app.services.user_services import get_user_by_email
 from app.models import TaskStatus
 from sqlalchemy.exc import SQLAlchemyError
 from datetime import datetime
 from app.services import notification_service
 
-# 2. Add project_id as an optional argument
 def create_task(title, description, duedate, status, owner_email, collaborator_emails, attachments, notes, priority, project_id=None):
     try:
         owner = get_user_by_email(owner_email)
@@ -22,7 +21,6 @@ def create_task(title, description, duedate, status, owner_email, collaborator_e
 
         task = Task(title=title, description=description, duedate=duedate, status=status, owner=owner, collaborators=collaborators, notes=notes, priority=priority)
 
-        # 3. If a project_id is provided, find the project and link it
         if project_id:
             project = Project.query.get(project_id)
             if project:
@@ -41,7 +39,7 @@ def create_task(title, description, duedate, status, owner_email, collaborator_e
     
     except SQLAlchemyError as e:
         db.session.rollback()
-        raise RuntimeError(f"Database error while saving task: {e}")
+        raise RuntimeError("Database error while creating task")
 
 def get_task(task_id):
     try:
