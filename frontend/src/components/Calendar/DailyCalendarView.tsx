@@ -98,21 +98,26 @@ export default function DailyCalendarView({
                         dayEvents.map(calEvent => (
                             <div
                                 key={calEvent.id}
-                                className="p-4 border rounded-lg hover:bg-gray-50 cursor-pointer"
+                                className={`p-4 border rounded-lg hover:bg-gray-50 cursor-pointer ${calEvent.status === 'overdue'
+                                        ? 'bg-red-50 border-red-300 hover:bg-red-100'
+                                        : ''
+                                    }`}
                                 onClick={() => onSelectEvent?.(calEvent)}
                             >
                                 <div className="flex items-start justify-between">
                                     <div className="flex-1">
                                         <div className="flex items-center gap-2 mb-2">
-                                            <h3 className="font-semibold text-lg">
+                                            <h3 className={`font-semibold text-lg ${calEvent.status === 'overdue' ? 'text-red-800' : ''
+                                                }`}>
                                                 {calEvent.type === 'task' ? '📝' : '📁'} {calEvent.title}
                                             </h3>
-                                            <Badge variant={getStatusColor(calEvent.status)}>
-                                                {calEvent.status}
+                                            <Badge
+                                                variant={getStatusColor(calEvent.status)}
+                                                className={calEvent.status === 'overdue' ? 'animate-pulse' : ''}
+                                            >
+                                                {calEvent.status === 'overdue' ? '⚠️ ' : ''}{calEvent.status}
                                             </Badge>
-                                            <Badge variant="outline">
-                                                {calEvent.type}
-                                            </Badge>
+                                            <Badge variant="outline">{calEvent.type}</Badge>
                                         </div>
 
                                         {calEvent.description && (
@@ -137,6 +142,12 @@ export default function DailyCalendarView({
                                                 </div>
                                             )}
                                         </div>
+
+                                        {calEvent.status === 'overdue' && (
+                                            <div className="flex items-center gap-1 mt-3 text-red-600 text-sm">
+                                                <span>⚠️ This item is overdue</span>
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                             </div>

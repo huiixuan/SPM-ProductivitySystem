@@ -1,7 +1,7 @@
 # routes/calendar.py
 from flask import Blueprint, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from datetime import datetime
+from datetime import datetime, date
 from app.models import db, User, Project, Task, ProjectStatus, TaskStatus
 
 calendar_bp = Blueprint("calendar", __name__)
@@ -25,25 +25,26 @@ def get_personal_calendar():
             (Project.owner_id == user_id) | (Project.collaborators.any(User.id == user_id))
         ).all()
 
-        # Get user's tasks - we need to query tasks properly
-        # Since your Task model doesn't have direct user relationship, we'll get owned tasks
+        # Get user's tasks
         user_tasks = Task.query.filter(Task.owner_id == user_id).all()
 
-        now = datetime.now().date()
+        now = date.today()  # Use date.today() instead of datetime.now().date()
         
         # Process projects
         for project in user_projects:
             if project.deadline:
-                status = "upcoming"
-                if project.status == ProjectStatus.COMPLETED:
+                # Fix status calculation logic - overdue has highest priority
+                if project.deadline < now and project.status != ProjectStatus.COMPLETED:
+                    status = "overdue"
+                elif project.status == ProjectStatus.COMPLETED:
                     status = "completed"
                 elif project.status == ProjectStatus.IN_PROGRESS:
                     status = "ongoing"
-                elif project.deadline < now:
-                    status = "overdue"
+                else:
+                    status = "upcoming"
                 
                 events.append({
-                    "id": project.id,
+                    "id": f"project-{project.id}",
                     "title": project.name,
                     "description": project.description,
                     "start": project.deadline.isoformat(),
@@ -56,16 +57,18 @@ def get_personal_calendar():
         # Process tasks
         for task in user_tasks:
             if task.duedate:
-                status = "upcoming"
-                if task.status == TaskStatus.COMPLETED:
+                # Fix status calculation logic for tasks - overdue has highest priority
+                if task.duedate < now and task.status != TaskStatus.COMPLETED:
+                    status = "overdue"
+                elif task.status == TaskStatus.COMPLETED:
                     status = "completed"
                 elif task.status in [TaskStatus.ONGOING, TaskStatus.PENDING_REVIEW]:
                     status = "ongoing"
-                elif task.duedate < now:
-                    status = "overdue"
+                else:
+                    status = "upcoming"
                 
                 events.append({
-                    "id": task.id + 10000,  # Offset to avoid ID conflicts
+                    "id": f"task-{task.id}",
                     "title": task.title,
                     "description": task.description,
                     "start": task.duedate.isoformat(),
@@ -108,25 +111,27 @@ def get_team_calendar():
         team_tasks = Task.query.filter(Task.owner_id.in_(team_member_ids)).all()
 
         events = []
-        now = datetime.now().date()
+        now = date.today()
 
         # Process projects
         for project in user_projects:
             if project.deadline:
-                status = "upcoming"
-                if project.status == ProjectStatus.COMPLETED:
+                # Fix status calculation logic - overdue has highest priority
+                if project.deadline < now and project.status != ProjectStatus.COMPLETED:
+                    status = "overdue"
+                elif project.status == ProjectStatus.COMPLETED:
                     status = "completed"
                 elif project.status == ProjectStatus.IN_PROGRESS:
                     status = "ongoing"
-                elif project.deadline < now:
-                    status = "overdue"
+                else:
+                    status = "upcoming"
                 
                 # Get project owner email
                 owner = db.session.get(User, project.owner_id)
                 owner_email = owner.email if owner else "Unknown"
                 
                 events.append({
-                    "id": project.id,
+                    "id": f"project-{project.id}",
                     "title": project.name,
                     "description": project.description,
                     "start": project.deadline.isoformat(),
@@ -140,20 +145,22 @@ def get_team_calendar():
         # Process tasks for team members
         for task in team_tasks:
             if task.duedate:
-                status = "upcoming"
-                if task.status == TaskStatus.COMPLETED:
+                # Fix status calculation logic for tasks - overdue has highest priority
+                if task.duedate < now and task.status != TaskStatus.COMPLETED:
+                    status = "overdue"
+                elif task.status == TaskStatus.COMPLETED:
                     status = "completed"
                 elif task.status in [TaskStatus.ONGOING, TaskStatus.PENDING_REVIEW]:
                     status = "ongoing"
-                elif task.duedate < now:
-                    status = "overdue"
+                else:
+                    status = "upcoming"
                 
                 # Get task owner
                 owner = db.session.get(User, task.owner_id)
                 owner_email = owner.email if owner else "Unknown"
                 
                 events.append({
-                    "id": task.id + 20000,  # Different offset for tasks
+                    "id": f"task-{task.id}",
                     "title": task.title,
                     "description": task.description,
                     "start": task.duedate.isoformat(),
@@ -185,7 +192,7 @@ def get_workload_data():
         all_users = User.query.all()
         
         workload_data = []
-        now = datetime.now().date()
+        now = date.today()
         
         for user in all_users:
             # Count active tasks (not completed) where user is owner
@@ -225,3 +232,49 @@ def get_workload_data():
         
     except Exception as e:
         return jsonify({"error": f"An unexpected server error occurred: {e}"}), 500
+
+@calendar_bp.route("/debug-status", methods=["GET"])
+@jwt_required()
+def debug_status_calculation():
+    """Debug endpoint to check status calculation"""
+    try:
+        user_id_str = get_jwt_identity()
+        user_id = int(user_id_str)
+        
+        now = date.today()
+        debug_info = {
+            "current_date": now.isoformat(),
+            "user_id": user_id,
+            "tasks": [],
+            "projects": []
+        }
+
+        # Get user's tasks
+        user_tasks = Task.query.filter(Task.owner_id == user_id).all()
+        for task in user_tasks:
+            task_info = {
+                "id": task.id,
+                "title": task.title,
+                "duedate": task.duedate.isoformat() if task.duedate else None,
+                "status": task.status.value,
+                "calculated_status": "unknown",
+                "is_overdue": False
+            }
+            
+            if task.duedate:
+                if task.duedate < now and task.status != TaskStatus.COMPLETED:
+                    task_info["calculated_status"] = "overdue"
+                    task_info["is_overdue"] = True
+                elif task.status == TaskStatus.COMPLETED:
+                    task_info["calculated_status"] = "completed"
+                elif task.status in [TaskStatus.ONGOING, TaskStatus.PENDING_REVIEW]:
+                    task_info["calculated_status"] = "ongoing"
+                else:
+                    task_info["calculated_status"] = "upcoming"
+            
+            debug_info["tasks"].append(task_info)
+
+        return jsonify(debug_info), 200
+
+    except Exception as e:
+        return jsonify({"error": f"Debug error: {e}"}), 500

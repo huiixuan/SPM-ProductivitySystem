@@ -50,6 +50,28 @@ type BasicTeamMember = {
     role: string;
 };
 
+// Helper function to enhance events with overdue status
+const enhanceEventWithOverdueStatus = (event: ApiCalendarEvent): CalendarEvent => {
+    const start = new Date(event.start);
+    const end = new Date(event.end);
+
+    // If backend status is not overdue but due date has passed, mark as overdue
+    let status = event.status;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0); // Set to beginning of day for accurate comparison
+
+    if (status !== 'completed' && start < today && status !== 'overdue') {
+        status = 'overdue';
+    }
+
+    return {
+        ...event,
+        start,
+        end,
+        status
+    };
+};
+
 export default function SchedulePage() {
     const [activeTab, setActiveTab] = useState<"personal" | "team">("personal");
     const [displayMode, setDisplayMode] = useState<DisplayMode>('calendar');
@@ -112,21 +134,17 @@ export default function SchedulePage() {
 
             if (personalRes.ok) {
                 const personalData = await personalRes.json();
-                const events = personalData.events.map((event: ApiCalendarEvent) => ({
-                    ...event,
-                    start: new Date(event.start),
-                    end: new Date(event.end),
-                }));
+                const events = personalData.events.map((event: ApiCalendarEvent) =>
+                    enhanceEventWithOverdueStatus(event)
+                );
                 setPersonalEvents(events);
             }
 
             if (teamRes.ok) {
                 const teamData = await teamRes.json();
-                const events = teamData.events.map((event: ApiCalendarEvent) => ({
-                    ...event,
-                    start: new Date(event.start),
-                    end: new Date(event.end),
-                }));
+                const events = teamData.events.map((event: ApiCalendarEvent) =>
+                    enhanceEventWithOverdueStatus(event)
+                );
                 setTeamEvents(events);
             }
 
@@ -451,17 +469,23 @@ export default function SchedulePage() {
                             {currentEvents.map((event) => (
                                 <div
                                     key={`${event.type}-${event.id}`}
-                                    className={`flex items-center justify-between p-3 border rounded-lg ${event.status === 'overdue' ? 'bg-red-50 border-red-200' : ''
+                                    className={`flex items-center justify-between p-4 border rounded-lg transition-all duration-200 ${event.status === 'overdue'
+                                            ? 'bg-red-50 border-red-300 shadow-sm hover:bg-red-100'
+                                            : 'hover:bg-gray-50'
                                         }`}
                                     onClick={() => handleEventSelect(event)}
                                 >
                                     <div className="flex-1">
                                         <div className="flex items-center gap-2 mb-2">
-                                            <h4 className={`font-medium ${event.status === 'overdue' ? 'text-red-800' : ''
+                                            <h4 className={`font-medium ${event.status === 'overdue' ? 'text-red-800 text-lg' : ''
                                                 }`}>
                                                 {event.type === 'task' ? '📝' : '📁'} {event.title}
                                             </h4>
-                                            <Badge variant={getStatusColor(event.status)}>{event.status}</Badge>
+                                            <Badge variant={getStatusColor(event.status)} className={
+                                                event.status === 'overdue' ? 'animate-pulse' : ''
+                                            }>
+                                                {event.status === 'overdue' ? '⚠️ ' : ''}{event.status}
+                                            </Badge>
                                             <Badge variant="outline">{event.type}</Badge>
                                         </div>
                                         <p className={`text-sm ${event.status === 'overdue' ? 'text-red-600 font-medium' : 'text-muted-foreground'
@@ -480,6 +504,13 @@ export default function SchedulePage() {
                                             <p className="text-sm mt-1 text-muted-foreground">
                                                 Assigned to: {event.assigneeEmail}
                                             </p>
+                                        )}
+
+                                        {/* Overdue warning for tasks due today */}
+                                        {event.status === 'overdue' && (
+                                            <div className="flex items-center gap-1 mt-2 text-red-600 text-sm">
+                                                <span>⚠️ This item is overdue</span>
+                                            </div>
                                         )}
                                     </div>
                                 </div>

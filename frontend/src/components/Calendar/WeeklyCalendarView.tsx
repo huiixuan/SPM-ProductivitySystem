@@ -124,18 +124,24 @@ export default function WeeklyCalendarView({
                                     {dayEvents.map(calEvent => (
                                         <div
                                             key={calEvent.id}
-                                            className="text-xs p-1 rounded cursor-pointer hover:bg-gray-100 border-l-4"
+                                            className={`text-xs p-1 rounded cursor-pointer hover:bg-gray-100 border-l-4 ${calEvent.status === 'overdue' ? 'bg-red-50 border-red-300' : ''
+                                                }`}
                                             style={{
                                                 borderLeftColor: getStatusBorderColor(calEvent.status)
                                             }}
                                             onClick={() => onSelectEvent?.(calEvent)}
                                             title={`${calEvent.title} - ${calEvent.status}`}
                                         >
-                                            <div className="font-medium truncate">
+                                            <div className={`font-medium truncate ${calEvent.status === 'overdue' ? 'text-red-800 font-bold' : ''
+                                                }`}>
                                                 {calEvent.type === 'task' ? '📝' : '📁'} {calEvent.title}
                                             </div>
-                                            <Badge variant={getStatusColor(calEvent.status)} className="mt-1 text-xs">
-                                                {calEvent.status}
+                                            <Badge
+                                                variant={getStatusColor(calEvent.status)}
+                                                className={`mt-1 text-xs ${calEvent.status === 'overdue' ? 'animate-pulse' : ''
+                                                    }`}
+                                            >
+                                                {calEvent.status === 'overdue' ? '⚠️ ' : ''}{calEvent.status}
                                             </Badge>
                                         </div>
                                     ))}
