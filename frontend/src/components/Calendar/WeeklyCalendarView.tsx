@@ -59,7 +59,7 @@ export default function WeeklyCalendarView({
 
     const getStatusColor = (status: string) => {
         switch (status) {
-            case 'overdue': return 'destructive';
+            case 'overdue': return 'black';
             case 'ongoing': return 'default';
             case 'completed': return 'secondary';
             default: return 'outline';

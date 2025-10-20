@@ -99,7 +99,7 @@ export default function EventDetailsModal({ event, isOpen, onClose }: EventDetai
                         <span className="font-medium">
                             {event.status === 'overdue' ? 'Overdue by:' : 'Due in:'}
                         </span>
-                        <span className={event.status === 'overdue' ? 'text-destructive font-semibold' : ''}>
+                        <span className={event.status === 'overdue' ? 'text-black font-semibold' : ''}>
                             {Math.ceil((event.start.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))} days
                         </span>
                     </div>
