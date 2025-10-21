@@ -6,12 +6,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Calendar as CalendarIcon, List, Users } from "lucide-react";
+import { ArrowLeft, Calendar as CalendarIcon, List, Users, RefreshCw } from "lucide-react";
 import MonthlyCalendarView from "@/components/Calendar/MonthlyCalendarView";
 import WeeklyCalendarView from "@/components/Calendar/WeeklyCalendarView";
 import DailyCalendarView from "@/components/Calendar/DailyCalendarView";
 import EventDetailsModal from "@/components/Calendar/EventDetailsModal";
-import { cn } from "@/lib/utils";
 
 type CalendarEvent = {
     id: number;
@@ -34,6 +33,9 @@ type TeamMember = {
     email: string;
     role: string;
     workload: number;
+    task_count: number;
+    project_count: number;
+    overdue_count: number;
 };
 
 type DisplayMode = 'calendar' | 'list';
@@ -84,6 +86,7 @@ export default function SchedulePage() {
     const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
     const [selectedMember, setSelectedMember] = useState<string>('all');
     const [loading, setLoading] = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
     const [currentUser, setCurrentUser] = useState<UserData | null>(null);
     const navigate = useNavigate();
 
@@ -115,6 +118,8 @@ export default function SchedulePage() {
                 navigate("/");
                 return;
             }
+
+            setRefreshing(true);
 
             const [personalRes, teamRes, workloadRes, teamMembersRes] = await Promise.all([
                 fetch("http://127.0.0.1:5000/api/calendar/personal", {
@@ -152,21 +157,23 @@ export default function SchedulePage() {
                 setTeamMembers(workloadData.team_members);
             }
 
-            if (teamMembersRes.ok) {
+            if (teamMembersRes.ok && teamMembers.length === 0) {
                 const teamMembersData = await teamMembersRes.json();
-                if (teamMembers.length === 0) {
-                    const fallbackMembers = teamMembersData.members.map((member: BasicTeamMember) => ({
-                        ...member,
-                        workload: 0
-                    }));
-                    setTeamMembers(fallbackMembers);
-                }
+                const fallbackMembers = teamMembersData.members.map((member: BasicTeamMember) => ({
+                    ...member,
+                    workload: 0,
+                    task_count: 0,
+                    project_count: 0,
+                    overdue_count: 0
+                }));
+                setTeamMembers(fallbackMembers);
             }
 
         } catch (error) {
             console.error("Failed to fetch calendar data:", error);
         } finally {
             setLoading(false);
+            setRefreshing(false);
         }
     }, [navigate, teamMembers.length]);
 
@@ -209,54 +216,74 @@ export default function SchedulePage() {
         setCurrentDate(new Date());
     };
 
+    const filteredTeamEvents = selectedMember === 'all'
+        ? teamEvents
+        : teamEvents.filter(event => {
+            const isAssignee = event.assigneeEmail === selectedMember;
+
+            const isCollaborator = event.collaborators?.includes(selectedMember) || false;
+
+            return isAssignee || isCollaborator;
+        });
+
+    const currentEvents = activeTab === 'personal' ? personalEvents : filteredTeamEvents;
+
     const getStatusColor = (status: string) => {
         switch (status) {
-            case 'overdue': return 'outline';
+            case 'overdue': return 'destructive';
             case 'ongoing': return 'default';
             case 'completed': return 'secondary';
             default: return 'outline';
         }
     };
 
-    const getStatusClassName = (status: string) => {
-        switch (status) {
-            case 'overdue': return 'bg-red-100 text-black border-red-300 hover:bg-red-200';
-            default: return '';
-        }
+    const getWorkloadLevel = (workload: number) => {
+        if (workload <= 2) return 'low';
+        if (workload <= 5) return 'medium';
+        return 'high';
     };
 
-    const getWorkloadVariant = (): "outline" => {
-        return 'outline';
-    };
-
-    const getWorkloadClassName = (level: string) => {
+    const getWorkloadVariant = (level: string) => {
         switch (level) {
-            case 'high': return 'bg-red-100 text-black border-red-300 hover:bg-red-200';
-            case 'medium': return 'bg-yellow-100 text-black border-yellow-300 hover:bg-yellow-200';
-            case 'low': return 'bg-green-100 text-black border-green-300 hover:bg-green-200';
-            default: return '';
+            case 'high': return 'destructive';
+            case 'medium': return 'default';
+            default: return 'secondary';
         }
     };
 
-    const filteredTeamEvents = selectedMember === 'all'
-        ? teamEvents
-        : teamEvents.filter(event => {
-            if (event.type === 'project') {
-                return event.assigneeEmail === selectedMember;
-            }
-            else if (event.type === 'task') {
-                const isAssignee = event.assigneeEmail === selectedMember;
-                const isCollaborator = event.collaborators?.includes(selectedMember);
-                return isAssignee || isCollaborator;
-            }
-            return false;
-        });
+    const getWorkloadDisplay = (member: TeamMember) => {
+        const totalItems = member.workload;
+        const breakdown = [];
 
-    const currentEvents = activeTab === 'personal' ? personalEvents : filteredTeamEvents;
+        if (member.task_count > 0) {
+            breakdown.push(`${member.task_count} task${member.task_count !== 1 ? 's' : ''}`);
+        }
+        if (member.project_count > 0) {
+            breakdown.push(`${member.project_count} project${member.project_count !== 1 ? 's' : ''}`);
+        }
+        if (member.overdue_count > 0) {
+            breakdown.push(`${member.overdue_count} overdue`);
+        }
+
+        return {
+            total: totalItems,
+            breakdown: breakdown.length > 0 ? breakdown.join(', ') : 'No items'
+        };
+    };
 
     const overdueCount = personalEvents.filter(event => event.status === 'overdue').length;
     const upcomingCount = personalEvents.filter(event => event.status === 'upcoming').length;
     const ongoingCount = personalEvents.filter(event => event.status === 'ongoing').length;
+
+    // Debug logging to check filtering
+    useEffect(() => {
+        if (activeTab === 'team') {
+            console.log('Team Events:', teamEvents.length);
+            console.log('Selected Member:', selectedMember);
+            console.log('Filtered Team Events:', filteredTeamEvents.length);
+            console.log('Current Events:', currentEvents.length);
+        }
+    }, [activeTab, selectedMember, teamEvents, filteredTeamEvents, currentEvents]);
 
     if (loading) {
         return (
@@ -310,17 +337,13 @@ export default function SchedulePage() {
                                     variant="outline"
                                     size="sm"
                                     onClick={fetchCalendarData}
+                                    disabled={refreshing}
+                                    className="flex items-center gap-2"
                                 >
-                                    Refresh Data
+                                    <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+                                    Refresh
                                 </Button>
-                                {overdueCount > 0 && (
-                                    <Badge
-                                        variant={getStatusColor('overdue')}
-                                        className={getStatusClassName('overdue')}
-                                    >
-                                        {overdueCount} overdue
-                                    </Badge>
-                                )}
+                                {overdueCount > 0 && <Badge variant="destructive">{overdueCount} overdue</Badge>}
                                 {ongoingCount > 0 && <Badge variant="default">{ongoingCount} ongoing</Badge>}
                                 {upcomingCount > 0 && <Badge variant="outline">{upcomingCount} upcoming</Badge>}
                             </div>
@@ -374,7 +397,7 @@ export default function SchedulePage() {
                                 </Button>
                             </div>
                             <div className="text-sm text-muted-foreground">
-                                Auto-refreshes every 30 seconds
+                                {refreshing ? 'Refreshing...' : 'Auto-refreshes every 30 seconds'}
                             </div>
                         </div>
                     </CardContent>
@@ -387,19 +410,28 @@ export default function SchedulePage() {
                     <CardHeader>
                         <div className="flex items-center justify-between">
                             <CardTitle>Team Overview</CardTitle>
-                            <Select value={selectedMember} onValueChange={setSelectedMember}>
-                                <SelectTrigger className="w-64">
-                                    <SelectValue placeholder="Filter by team member" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="all">All Team Members</SelectItem>
-                                    {teamMembers.map(member => (
-                                        <SelectItem key={member.id} value={member.email}>
-                                            {member.name} ({member.role}) - {member.workload} tasks
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
+                            <div className="flex items-center gap-4">
+                                <div className="text-sm text-muted-foreground">
+                                    Showing {filteredTeamEvents.length} events for{' '}
+                                    {selectedMember === 'all' ? 'all team members' : selectedMember}
+                                </div>
+                                <Select value={selectedMember} onValueChange={setSelectedMember}>
+                                    <SelectTrigger className="w-64">
+                                        <SelectValue placeholder="Filter by team member" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="all">All Team Members</SelectItem>
+                                        {teamMembers.map(member => {
+                                            const workloadDisplay = getWorkloadDisplay(member);
+                                            return (
+                                                <SelectItem key={member.id} value={member.email}>
+                                                    {member.name} - {workloadDisplay.total} items
+                                                </SelectItem>
+                                            );
+                                        })}
+                                    </SelectContent>
+                                </Select>
+                            </div>
                         </div>
                     </CardHeader>
                     <CardContent>
@@ -408,27 +440,39 @@ export default function SchedulePage() {
                             {teamMembers.length > 0 ? (
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                                     {teamMembers.map(member => {
-                                        const workloadLevel = member.workload <= 2 ? 'low' : member.workload <= 5 ? 'medium' : 'high';
+                                        const workloadLevel = getWorkloadLevel(member.workload);
+                                        const workloadDisplay = getWorkloadDisplay(member);
+                                        const isSelected = selectedMember === member.email;
+
                                         return (
-                                            <div key={member.id} className="border rounded-lg p-4">
+                                            <div
+                                                key={member.id}
+                                                className={`border rounded-lg p-4 cursor-pointer transition-all ${isSelected ? 'ring-2 ring-blue-500 bg-blue-50' : 'hover:bg-gray-50'
+                                                    }`}
+                                                onClick={() => setSelectedMember(isSelected ? 'all' : member.email)}
+                                            >
                                                 <div className="flex justify-between items-center mb-2">
-                                                    <span className="font-medium">{member.name}</span>
-                                                    <Badge
-                                                        variant={getWorkloadVariant()}
-                                                        className={getWorkloadClassName(workloadLevel)}
-                                                    >
-                                                        {member.workload} tasks
+                                                    <span className={`font-medium ${isSelected ? 'text-blue-700' : ''}`}>
+                                                        {member.name}
+                                                    </span>
+                                                    <Badge variant={getWorkloadVariant(workloadLevel)}>
+                                                        {workloadDisplay.total} items
                                                     </Badge>
                                                 </div>
                                                 <p className="text-sm text-muted-foreground">{member.email}</p>
                                                 <p className="text-xs text-muted-foreground capitalize">{member.role}</p>
+
+                                                <div className="mt-2 text-xs text-muted-foreground">
+                                                    {workloadDisplay.breakdown}
+                                                </div>
+
                                                 <div className="mt-2 w-full bg-gray-200 rounded-full h-2">
                                                     <div
                                                         className={`h-2 rounded-full ${workloadLevel === 'high' ? 'bg-red-500' :
-                                                            workloadLevel === 'medium' ? 'bg-yellow-500' : 'bg-green-500'
+                                                                workloadLevel === 'medium' ? 'bg-yellow-500' : 'bg-green-500'
                                                             }`}
                                                         style={{
-                                                            width: `${Math.min(member.workload * 20, 100)}%`
+                                                            width: `${Math.min(member.workload * 10, 100)}%`
                                                         }}
                                                     ></div>
                                                 </div>
@@ -484,6 +528,9 @@ export default function SchedulePage() {
                             {activeTab === 'personal' ? 'My Deadlines' : 'Team Deadlines'}
                             <span className="text-sm font-normal text-muted-foreground ml-2">
                                 • {currentEvents.length} items
+                                {activeTab === 'team' && selectedMember !== 'all' && (
+                                    <> for {selectedMember}</>
+                                )}
                             </span>
                         </CardTitle>
                     </CardHeader>
@@ -493,8 +540,8 @@ export default function SchedulePage() {
                                 <div
                                     key={`${event.type}-${event.id}`}
                                     className={`flex items-center justify-between p-4 border rounded-lg transition-all duration-200 ${event.status === 'overdue'
-                                        ? 'bg-red-50 border-red-300 shadow-sm hover:bg-red-100'
-                                        : 'hover:bg-gray-50'
+                                            ? 'bg-red-50 border-red-300 shadow-sm hover:bg-red-100'
+                                            : 'hover:bg-gray-50'
                                         }`}
                                     onClick={() => handleEventSelect(event)}
                                 >
@@ -504,13 +551,9 @@ export default function SchedulePage() {
                                                 }`}>
                                                 {event.type === 'task' ? '📝' : '📁'} {event.title}
                                             </h4>
-                                            <Badge
-                                                variant={getStatusColor(event.status)}
-                                                className={cn(
-                                                    getStatusClassName(event.status),
-                                                    event.status === 'overdue' ? 'animate-pulse' : ''
-                                                )}
-                                            >
+                                            <Badge variant={getStatusColor(event.status)} className={
+                                                event.status === 'overdue' ? 'animate-pulse' : ''
+                                            }>
                                                 {event.status === 'overdue' ? '⚠️ ' : ''}{event.status}
                                             </Badge>
                                             <Badge variant="outline">{event.type}</Badge>
@@ -530,6 +573,9 @@ export default function SchedulePage() {
                                         {event.assigneeEmail && activeTab === 'team' && (
                                             <p className="text-sm mt-1 text-muted-foreground">
                                                 Assigned to: {event.assigneeEmail}
+                                                {event.collaborators && event.collaborators.length > 0 && (
+                                                    <span> (with {event.collaborators.length} collaborator{event.collaborators.length !== 1 ? 's' : ''})</span>
+                                                )}
                                             </p>
                                         )}
 
@@ -543,10 +589,13 @@ export default function SchedulePage() {
                             ))}
                             {currentEvents.length === 0 && (
                                 <div className="text-center text-muted-foreground py-8">
-                                    No deadlines found.
-                                    {activeTab === 'personal'
-                                        ? ' Create tasks or projects to see them here.'
-                                        : ' Team deadlines will appear when projects have collaborators.'}
+                                    {activeTab === 'personal' ? (
+                                        'No deadlines found. Create tasks or projects to see them here.'
+                                    ) : selectedMember === 'all' ? (
+                                        'No team deadlines found. Team deadlines will appear when projects have collaborators.'
+                                    ) : (
+                                        `No deadlines found for ${selectedMember}. This user might not have any assigned tasks or projects with due dates.`
+                                    )}
                                 </div>
                             )}
                         </div>

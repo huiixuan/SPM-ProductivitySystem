@@ -1,4 +1,3 @@
-# routes/calendar.py
 from flask import Blueprint, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from datetime import datetime, date
@@ -24,14 +23,13 @@ def get_personal_calendar():
             (Project.owner_id == user_id) | (Project.collaborators.any(User.id == user_id))
         ).all()
 
-  
         user_tasks = Task.query.filter(
             (Task.owner_id == user_id) | (Task.collaborators.any(User.id == user_id))
         ).all()
 
         now = date.today()
         
-
+        # Process projects
         for project in user_projects:
             if project.deadline:
                 if project.deadline < now and project.status != ProjectStatus.COMPLETED:
@@ -53,7 +51,6 @@ def get_personal_calendar():
                     "status": status,
                     "deadline": project.deadline.isoformat(),
                 })
-
 
         for task in user_tasks:
             if task.duedate:
@@ -85,7 +82,7 @@ def get_personal_calendar():
 @calendar_bp.route("/team", methods=["GET"])
 @jwt_required()
 def get_team_calendar():
-    """Get team calendar data"""
+    """Get team calendar data - ENHANCED for better filtering"""
     try:
         user_id_str = get_jwt_identity()
         user_id = int(user_id_str)
@@ -94,21 +91,17 @@ def get_team_calendar():
         if not current_user:
             return jsonify({"error": "User not found"}), 404
 
-  
         user_projects = Project.query.filter(
             (Project.owner_id == user_id) | (Project.collaborators.any(User.id == user_id))
         ).all()
 
-    
         team_member_ids = set()
         
-
         for project in user_projects:
             team_member_ids.add(project.owner_id)
             for collaborator in project.collaborators:
                 team_member_ids.add(collaborator.id)
         
-  
         user_tasks = Task.query.filter(
             (Task.owner_id == user_id) | (Task.collaborators.any(User.id == user_id))
         ).all()
@@ -118,17 +111,24 @@ def get_team_calendar():
             for collaborator in task.collaborators:
                 team_member_ids.add(collaborator.id)
 
-     
+        # Get all team members for reference
+        all_team_members = User.query.filter(User.id.in_(list(team_member_ids))).all()
+        team_member_emails = {member.id: member.email for member in all_team_members}
+
         team_tasks = Task.query.filter(
             (Task.owner_id.in_(list(team_member_ids))) | 
             (Task.collaborators.any(User.id.in_(list(team_member_ids))))
         ).all()
 
+        team_projects = Project.query.filter(
+            (Project.owner_id.in_(list(team_member_ids))) | 
+            (Project.collaborators.any(User.id.in_(list(team_member_ids))))
+        ).all()
+
         events = []
         now = date.today()
 
-    
-        for project in user_projects:
+        for project in team_projects:
             if project.deadline:
                 if project.deadline < now and project.status != ProjectStatus.COMPLETED:
                     status = "overdue"
@@ -142,6 +142,9 @@ def get_team_calendar():
                 owner = db.session.get(User, project.owner_id)
                 owner_email = owner.email if owner else "Unknown"
                 
+
+                project_collaborator_emails = [collab.email for collab in project.collaborators]
+                
                 events.append({
                     "id": f"project-{project.id}",
                     "title": project.name,
@@ -152,9 +155,9 @@ def get_team_calendar():
                     "status": status,
                     "assignee": owner.name if owner else "Unknown",
                     "assigneeEmail": owner_email,
+                    "collaborators": project_collaborator_emails
                 })
 
-        
         for task in team_tasks:
             if task.duedate:
                 if task.duedate < now and task.status != TaskStatus.COMPLETED:
@@ -166,11 +169,9 @@ def get_team_calendar():
                 else:
                     status = "upcoming"
                 
-                
                 owner = db.session.get(User, task.owner_id)
                 owner_email = owner.email if owner else "Unknown"
                 
-              
                 collaborator_emails = [collab.email for collab in task.collaborators]
                 
                 events.append({
@@ -194,7 +195,7 @@ def get_team_calendar():
 @calendar_bp.route("/workload", methods=["GET"])
 @jwt_required()
 def get_workload_data():
-    """Get workload data for all users"""
+    """Get workload data for all users - FIXED to only count active calendar items"""
     try:
         user_id_str = get_jwt_identity()
         user_id = int(user_id_str)
@@ -203,42 +204,42 @@ def get_workload_data():
         if not current_user:
             return jsonify({"error": "User not found"}), 404
 
-
         all_users = User.query.all()
         
         workload_data = []
         now = date.today()
         
         for user in all_users:
-            active_tasks_count = Task.query.filter(
-                (Task.owner_id == user.id) | (Task.collaborators.any(User.id == user.id)),
-                Task.status != TaskStatus.COMPLETED
+            calendar_tasks_count = Task.query.filter(
+                ((Task.owner_id == user.id) | (Task.collaborators.any(User.id == user.id))),
+                Task.duedate.isnot(None),  # Only tasks with due dates
+                Task.status != TaskStatus.COMPLETED  # Only active tasks
             ).count()
             
-
+  
             overdue_tasks_count = Task.query.filter(
                 ((Task.owner_id == user.id) | (Task.collaborators.any(User.id == user.id))),
+                Task.duedate.isnot(None),
                 Task.status != TaskStatus.COMPLETED,
                 Task.duedate < now
             ).count()
             
-
-            active_projects_count = Project.query.filter(
+            calendar_projects_count = Project.query.filter(
                 (Project.owner_id == user.id) | (Project.collaborators.any(User.id == user.id)),
-                Project.status != ProjectStatus.COMPLETED
+                Project.deadline.isnot(None),  
+                Project.status != ProjectStatus.COMPLETED  
             ).count()
             
-
-            total_workload = active_tasks_count + active_projects_count + (overdue_tasks_count * 0.5)
+            total_workload = calendar_tasks_count + calendar_projects_count
             
             workload_data.append({
                 "id": user.id,
                 "name": user.name,
                 "email": user.email,
                 "role": user.role.value,
-                "workload": int(total_workload),
-                "task_count": active_tasks_count,
-                "project_count": active_projects_count,
+                "workload": total_workload,  
+                "task_count": calendar_tasks_count,
+                "project_count": calendar_projects_count,
                 "overdue_count": overdue_tasks_count
             })
         
@@ -247,46 +248,49 @@ def get_workload_data():
     except Exception as e:
         return jsonify({"error": f"An unexpected server error occurred: {e}"}), 500
 
-@calendar_bp.route("/debug-status", methods=["GET"])
+@calendar_bp.route("/debug-team", methods=["GET"])
 @jwt_required()
-def debug_status_calculation():
-    """Debug endpoint to check status calculation"""
+def debug_team_data():
+    """Debug endpoint to check team data"""
     try:
         user_id_str = get_jwt_identity()
         user_id = int(user_id_str)
         
-        now = date.today()
-        debug_info = {
-            "current_date": now.isoformat(),
-            "user_id": user_id,
-            "tasks": [],
-            "projects": []
-        }
+        user_projects = Project.query.filter(
+            (Project.owner_id == user_id) | (Project.collaborators.any(User.id == user_id))
+        ).all()
 
-
-        user_tasks = Task.query.filter(Task.owner_id == user_id).all()
+        team_member_ids = set()
+        
+        for project in user_projects:
+            team_member_ids.add(project.owner_id)
+            for collaborator in project.collaborators:
+                team_member_ids.add(collaborator.id)
+        
+        user_tasks = Task.query.filter(
+            (Task.owner_id == user_id) | (Task.collaborators.any(User.id == user_id))
+        ).all()
+        
         for task in user_tasks:
-            task_info = {
-                "id": task.id,
-                "title": task.title,
-                "duedate": task.duedate.isoformat() if task.duedate else None,
-                "status": task.status.value,
-                "calculated_status": "unknown",
-                "is_overdue": False
-            }
-            
-            if task.duedate:
-                if task.duedate < now and task.status != TaskStatus.COMPLETED:
-                    task_info["calculated_status"] = "overdue"
-                    task_info["is_overdue"] = True
-                elif task.status == TaskStatus.COMPLETED:
-                    task_info["calculated_status"] = "completed"
-                elif task.status in [TaskStatus.ONGOING, TaskStatus.PENDING_REVIEW]:
-                    task_info["calculated_status"] = "ongoing"
-                else:
-                    task_info["calculated_status"] = "upcoming"
-            
-            debug_info["tasks"].append(task_info)
+            team_member_ids.add(task.owner_id)
+            for collaborator in task.collaborators:
+                team_member_ids.add(collaborator.id)
+
+        all_team_members = User.query.filter(User.id.in_(list(team_member_ids))).all()
+        
+        debug_info = {
+            "user_id": user_id,
+            "team_member_ids": list(team_member_ids),
+            "team_members": [
+                {
+                    "id": member.id,
+                    "name": member.name,
+                    "email": member.email
+                } for member in all_team_members
+            ],
+            "user_projects_count": len(user_projects),
+            "user_tasks_count": len(user_tasks)
+        }
 
         return jsonify(debug_info), 200
 
