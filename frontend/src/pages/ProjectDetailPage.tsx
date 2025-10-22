@@ -11,7 +11,6 @@ import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, Edit, Plus, Link as LinkIcon } from "lucide-react";
 import { toast } from "sonner";
 
-// Define the shape of a Project object for this page
 interface Project {
   id: number;
   name: string;
@@ -25,21 +24,20 @@ interface Project {
 }
 
 export default function ProjectDetailPage() {
-  const { projectId } = useParams<{ projectId: string }>(); // Get project ID from URL
+  const { projectId } = useParams<{ projectId: string }>(); 
   const [project, setProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
   
-  // State to control all the dialogs on this page
+
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isCreateTaskOpen, setIsCreateTaskOpen] = useState(false);
   const [isAddTaskOpen, setIsAddTaskOpen] = useState(false);
-  const [refreshTasksKey, setRefreshTasksKey] = useState(0); // Used to force TaskDashboard to refresh
+  const [refreshTasksKey, setRefreshTasksKey] = useState(0); 
 
   const navigate = useNavigate();
   const { userData } = useAuth();
   const token = localStorage.getItem("token");
 
-  // Fetch the project's details when the page loads
   useEffect(() => {
     const fetchProject = async () => {
       setLoading(true);
@@ -50,8 +48,12 @@ export default function ProjectDetailPage() {
         if (!res.ok) throw new Error("Failed to fetch project details.");
         const data = await res.json();
         setProject(data);
-      } catch (error: any) {
-        toast.error(error.message);
+      } catch (error: unknown) {
+          if (error instanceof Error) {
+              toast.error(error.message);
+          } else {
+              toast.error("An unknown error occurred.");
+          }
       } finally {
         setLoading(false);
       }
@@ -59,12 +61,12 @@ export default function ProjectDetailPage() {
     fetchProject();
   }, [projectId, token]);
 
-  // This function is called when a task is created or linked, triggering a refresh
+
   const handleTaskChange = () => {
     setRefreshTasksKey(prev => prev + 1);
   };
   
-  // This function updates the project details after editing
+
   const handleUpdateSuccess = (updatedProject: Project) => {
     setProject(updatedProject);
     setIsEditDialogOpen(false);
@@ -79,7 +81,7 @@ export default function ProjectDetailPage() {
         <ArrowLeft className="mr-2 h-4 w-4" /> Back to Projects
       </Button>
 
-      {/* Project Header with Action Buttons */}
+
       <div className="flex flex-wrap justify-between items-start gap-4">
         <div>
           <h1 className="text-3xl font-bold">{project.name}</h1>
@@ -99,7 +101,7 @@ export default function ProjectDetailPage() {
         </div>
       </div>
 
-      {/* Project Details Section */}
+
       <div className="mt-6 grid gap-4 md:grid-cols-2">
         <div>
           <h3 className="font-semibold">Description</h3>
@@ -113,11 +115,11 @@ export default function ProjectDetailPage() {
       
       <Separator className="my-8" />
       
-      {/* Task Dashboard for this project */}
+
       <h2 className="text-2xl font-bold mb-4">Project Tasks</h2>
       <TaskDashboard project={true} project_id={project.id} refreshKey={refreshTasksKey} />
 
-      {/* Render all the dialogs (they are invisible until opened) */}
+
       {userData && (
           <>
             <UpdateProjectDialog isOpen={isEditDialogOpen} setIsOpen={setIsEditDialogOpen} project={project} currentUserData={userData} onUpdateSuccess={handleUpdateSuccess}/>

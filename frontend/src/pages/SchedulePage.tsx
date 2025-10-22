@@ -275,7 +275,7 @@ export default function SchedulePage() {
     const upcomingCount = personalEvents.filter(event => event.status === 'upcoming').length;
     const ongoingCount = personalEvents.filter(event => event.status === 'ongoing').length;
 
-    // Debug logging to check filtering
+
     useEffect(() => {
         if (activeTab === 'team') {
             console.log('Team Events:', teamEvents.length);
@@ -295,7 +295,7 @@ export default function SchedulePage() {
 
     return (
         <div className="container mx-auto p-6 space-y-6">
-            {/* Header */}
+
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-4">
                     <Button variant="outline" onClick={handleBack} className="flex items-center gap-2">
@@ -323,7 +323,6 @@ export default function SchedulePage() {
                 </div>
             </div>
 
-            {/* User Info */}
             {currentUser && (
                 <Card>
                     <CardContent className="pt-6">
@@ -368,7 +367,6 @@ export default function SchedulePage() {
                 </Button>
             </div>
 
-            {/* Calendar View Controls */}
             {displayMode === 'calendar' && (
                 <Card>
                     <CardContent className="pt-6">
@@ -404,7 +402,6 @@ export default function SchedulePage() {
                 </Card>
             )}
 
-            {/* TEAM TAB - Workload Distribution */}
             {activeTab === 'team' && (
                 <Card>
                     <CardHeader>
@@ -490,7 +487,6 @@ export default function SchedulePage() {
                 </Card>
             )}
 
-            {/* Calendar or List View */}
             {displayMode === 'calendar' ? (
                 <>
                     {calendarView === 'month' && (
@@ -603,7 +599,6 @@ export default function SchedulePage() {
                 </Card>
             )}
 
-            {/* Event Details Modal */}
             <EventDetailsModal
                 event={selectedEvent}
                 isOpen={isEventModalOpen}

@@ -19,7 +19,7 @@ import {
 	LogOut,
 	FolderKanban,
 } from "lucide-react";
-import { NotificationBell } from "./NotificationBell";
+import { NotificationBell } from "./Notification/NotificationBell";
 
 const items = [
 	{

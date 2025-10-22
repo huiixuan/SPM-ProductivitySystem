@@ -10,6 +10,8 @@ import SchedulePage from "@/pages/SchedulePage";
 import Layout from "@/layout";
 import ProjectDashboard from '@/pages/ProjectDashboard'; 
 import ProjectDetailPage from '@/pages/ProjectDetailPage';
+import NotificationPage from "@/components/Notification/NotificationPage";
+import TaskDetailPage from "@/pages/TaskDetailPage";
 
 function App() {
 	return (
@@ -55,8 +57,25 @@ function App() {
 						</Layout>} /> 
 
         			<Route path="/projects/:projectId" 
-					element={<ProjectDetailPage />} />
+						element={<ProjectDetailPage />} />
+					<Route
+						path="/notifications"
+						element={
+							<Layout>
+								<NotificationPage />
+							</Layout>
+						}
+					/>
+					<Route
+						path="/tasks/:taskId"
+						element={
+							<Layout>
+								<TaskDetailPage />
+							</Layout>
+						}
+					/>
 				</Routes>
+				
 			</BrowserRouter>
 		</>
 	);

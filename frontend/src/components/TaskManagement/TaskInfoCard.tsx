@@ -9,6 +9,7 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { toast } from "sonner"
 import { FolderKanban } from "lucide-react"
+import { useNavigate } from "react-router-dom";
 
 interface UserData {
   role: string,
@@ -44,6 +45,7 @@ type TaskInfoCardProps = {
 }
 
 export default function TaskInfoCard({ task, currentUserData, onUpdate }: TaskInfoCardProps) {
+  const navigate = useNavigate();
   const [open, setOpen] = useState<boolean>(false)
 
   const handleUpdateSuccess = (updatedTask: Task) => {
@@ -64,7 +66,7 @@ export default function TaskInfoCard({ task, currentUserData, onUpdate }: TaskIn
 
   return (
     <div>
-      <Card className="rounded-none bg-white" onClick={() => setOpen(true)}>
+      <Card className="rounded-none bg-white" onClick={() => navigate(`/tasks/${task.id}`)}>
         <CardContent>
           <CardTitle>{task.title}</CardTitle>          
           <CardDescription className="mt-1">

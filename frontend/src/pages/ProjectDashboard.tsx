@@ -45,8 +45,8 @@ export default function ProjectDashboard() {
         if (!res.ok) throw new Error("Failed to fetch projects");
         const data = await res.json();
         setProjects(data);
-      } catch (err: any) {
-        setError(err.message);
+      } catch (err: unknown) {
+          setError(err instanceof Error ? err.message : "An unknown error occurred");
       } finally {
         setLoading(false);
       }

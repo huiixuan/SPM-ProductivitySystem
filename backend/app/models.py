@@ -27,6 +27,11 @@ class ProjectStatus(enum.Enum):
     IN_PROGRESS = "In Progress"
     COMPLETED = "Completed"
 
+class NotificationType(enum.Enum):
+    DUE_DATE_REMINDER = "due_date_reminder"
+    NEW_COMMENT = "new_comment"
+    TASK_UPDATED = "task_updated"
+
 # association tables
 task_collaborators = db.Table(
     "task_collaborators",
@@ -49,7 +54,6 @@ class User(db.Model):
     email = db.Column(db.String(100), unique=True, nullable=False)
     password_hash = db.Column(db.String(512), nullable=False)
 
-    # relationships
     owned_tasks = relationship("Task", back_populates="owner")
     tasks = relationship("Task", secondary=task_collaborators, back_populates="collaborators")
 
@@ -57,17 +61,30 @@ class User(db.Model):
     projects = relationship("Project", secondary=project_collaborators, back_populates="collaborators")
 
     notifications = relationship(
-    "Notification",
-    back_populates="user",
-    cascade="all, delete-orphan",
-    passive_deletes=True,
-)
+        "Notification",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
 
     def check_password(self, password):
         return check_password_hash(self.password_hash, password)    
+
+class Comment(db.Model):
+    __tablename__ = "comments"
+
+    id = db.Column(db.Integer, primary_key=True)
+    task_id = db.Column(db.Integer, db.ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    content = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime(timezone=True), server_default=func.now())
+
+    task = relationship("Task", back_populates="comments")
+    user = relationship("User")
+    notifications = relationship("Notification", back_populates="comment")
 
 class Task(db.Model):
     __tablename__ = "tasks"
@@ -83,12 +100,9 @@ class Task(db.Model):
     project_id = db.Column(db.Integer, db.ForeignKey("projects.id"), nullable=True)
     priority = db.Column(db.Integer, nullable=False, server_default='1', default=1)
 
-    owner_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
     owner = relationship("User", back_populates="owned_tasks")
-
-    project_id = db.Column(db.Integer, db.ForeignKey("projects.id"), nullable=True)
     project = relationship("Project", back_populates="project_tasks")
-
+    
     collaborators = relationship(
         "User", secondary=task_collaborators, back_populates="tasks"
     )
@@ -98,12 +112,13 @@ class Task(db.Model):
     )
 
     notifications = relationship(
-    "Notification",
-    back_populates="task",
-    cascade="all, delete-orphan",
-    passive_deletes=True,
-)
+        "Notification",
+        back_populates="task",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
 
+    comments = relationship("Comment", back_populates="task", cascade="all, delete-orphan")
 
     parent_id = db.Column(db.Integer, db.ForeignKey("tasks.id"), nullable=True)
     subtasks = relationship("Task", backref=db.backref("parent", remote_side=[id]), cascade="all, delete-orphan")
@@ -191,37 +206,80 @@ class Notification(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     task_id = db.Column(db.Integer, db.ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False)
-
+    type = db.Column(db.Enum(NotificationType, native_enum=False), nullable=False, default=NotificationType.DUE_DATE_REMINDER)
     payload = db.Column(
         JSONB,
         nullable=False,
-        default=dict,  # {"project_name": ..., "task_title": ..., "duedate": ...}
+        default=dict,
     )
 
-    trigger_days_before = db.Column(db.Integer, nullable=False)
+    trigger_days_before = db.Column(db.Integer, nullable=True)
     created_at = db.Column(db.DateTime(timezone=True), default=datetime.utcnow)
     is_read = db.Column(db.Boolean, nullable=False, default=False)
 
+
+    comment_id = db.Column(db.Integer, db.ForeignKey("comments.id"), nullable=True)
+
     __table_args__ = (
-        UniqueConstraint("user_id", "task_id", "trigger_days_before", name="uq_notification_unique_trigger"),
+        UniqueConstraint("user_id", "task_id", "trigger_days_before", "type", name="uq_notification_unique_trigger"),
         Index("ix_notification_user_isread_created", "user_id", "is_read", "created_at"),
     )
 
     user = db.relationship("User", back_populates="notifications")
     task = db.relationship("Task", back_populates="notifications")
+    comment = db.relationship("Comment", back_populates="notifications")
 
     @staticmethod
-    def build_payload(project_name: str, task_title: str, duedate: date):
-        return {
-            "project_name": project_name,
-            "task_title": task_title,
-            "duedate": duedate.isoformat() if duedate else None,
-        }
+    def build_payload(notification_type: NotificationType, **kwargs):
+        if notification_type == NotificationType.DUE_DATE_REMINDER:
+            return {
+                "project_name": kwargs.get("project_name"),
+                "task_title": kwargs.get("task_title"),
+                "duedate": kwargs.get("duedate").isoformat() if kwargs.get("duedate") else None,
+            }
+        elif notification_type == NotificationType.NEW_COMMENT:
+            return {
+                "project_name": kwargs.get("project_name"),
+                "task_title": kwargs.get("task_title"),
+                "comment_author": kwargs.get("comment_author"),
+                "comment_excerpt": kwargs.get("comment_excerpt"),
+                "comment_id": kwargs.get("comment_id"),
+            }
+        elif notification_type == NotificationType.TASK_UPDATED:
+            return {
+                "project_name": kwargs.get("project_name"),
+                "task_title": kwargs.get("task_title"),
+                "updated_fields": kwargs.get("updated_fields"),  
+                "updated_by": kwargs.get("updated_by"),
+            }
+        else:
+            return {}
 
     @property
     def message(self):
         p = self.payload or {}
-        pn = p.get("project_name", "Project")
-        tt = p.get("task_title", "Task")
-        dd = p.get("duedate", "")
-        return f"{pn}: '{tt}' is due on {dd} (in {self.trigger_days_before} day(s))."
+        if self.type == NotificationType.DUE_DATE_REMINDER:
+            pn = p.get("project_name", "Project")
+            tt = p.get("task_title", "Task")
+            dd = p.get("duedate", "")
+            return f"{pn}: '{tt}' is due on {dd} (in {self.trigger_days_before} day(s))."
+        elif self.type == NotificationType.NEW_COMMENT:
+            pn = p.get("project_name", "Project")
+            tt = p.get("task_title", "Task")
+            author = p.get("comment_author", "Someone")
+            excerpt = p.get("comment_excerpt", "")
+            return f"{author} commented on '{tt}' in {pn}: {excerpt}"
+        elif self.type == NotificationType.TASK_UPDATED:
+            pn = p.get("project_name", "Project")
+            tt = p.get("task_title", "Task")
+            updated_by = p.get("updated_by", "Someone")
+            fields = p.get("updated_fields", [])
+            changes = []
+            for change in fields:
+                field = change.get('field', '')
+                old_val = change.get('old_value', '')
+                new_val = change.get('new_value', '')
+                changes.append(f"{field} from {old_val} to {new_val}")
+            changes_str = ', '.join(changes)
+            return f"{updated_by} updated '{tt}' in {pn}: {changes_str}"
+        return "New notification"
