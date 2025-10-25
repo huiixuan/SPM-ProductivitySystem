@@ -73,6 +73,22 @@ def get_project_by_id(project_id):
         raise RuntimeError(f"Database error while fetching project {project_id}: {e}")
 # ------------------------------------
 
+def get_project_users(project_id):
+    try:
+        project = Project.query.get(project_id)
+        if not project:
+            raise ValueError(f"Project with ID {project_id} not found.")
+        
+        users = [project.owner] + project.collaborators
+        users_data = [
+            {"id": user.id, "role": user.role.value, "name": user.name, "email": user.email}
+            for user in users
+        ]
+
+        return users_data
+    except SQLAlchemyError as e:
+        raise RuntimeError(f"Database error while fetching project {project_id}: {e}")
+
 # Update the function signature to accept the 'collaborator_emails' list
 def update_project(project_id, data, new_files, collaborator_emails=None):
     try:

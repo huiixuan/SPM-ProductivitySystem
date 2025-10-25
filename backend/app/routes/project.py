@@ -78,6 +78,17 @@ def get_project_route(project_id):
         print(f"Error in get_project_route for ID {project_id}: {e}")
         traceback.print_exc()
         return jsonify({"success": False, "error": str(e)}), 500
+    
+@project_bp.route("/get-project-users/<int:project_id>", methods=["GET"])
+@jwt_required()
+def get_project_users_route(project_id):
+    try:
+        users = project_services.get_project_users(project_id)
+        return jsonify(users), 200
+    except Exception as e:
+        print(f"Error in get_project_users for ID {project_id}: {e}")
+        traceback.print_exc()
+        return jsonify({"success": False, "error": str(e)}), 500
 
 @project_bp.route("/update-project/<int:project_id>", methods=["PUT"])
 @jwt_required()

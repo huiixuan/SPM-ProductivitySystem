@@ -27,6 +27,7 @@ type TaskCreationProps = {
   setIsOpen?: (open: boolean) => void;
   projectId?: number;
   onTaskCreated?: () => void;
+  isProjectTask?: boolean
 };
 
 const formSchema = z.object({
@@ -42,7 +43,7 @@ const formSchema = z.object({
 });
 type TaskFormData = z.infer<typeof formSchema>;
 
-export default function TaskCreation({ buttonName, currentUserData, isOpen, setIsOpen, projectId, onTaskCreated }: TaskCreationProps) {
+export default function TaskCreation({ buttonName, currentUserData, isOpen, setIsOpen, projectId, onTaskCreated, isProjectTask }: TaskCreationProps) {
   const [internalOpen, setInternalOpen] = useState<boolean>(false);
   const statuses = ["Unassigned", "Ongoing", "Pending Review", "Completed"];
   const priorities = Array.from({ length: 10 }, (_, i) => i + 1);
@@ -214,7 +215,7 @@ export default function TaskCreation({ buttonName, currentUserData, isOpen, setI
                     <FormLabel>Task Owner</FormLabel>
                     <FormControl>
                       {["manager", "director"].includes(currentUserData.role) ? (
-                          <EmailCombobox value={field.value} onChange={field.onChange} placeholder="Select Task Owner..." currentUserData={currentUserData} />
+                          <EmailCombobox value={field.value} onChange={field.onChange} placeholder="Select Task Owner..." currentUserData={currentUserData} isProjectTask={isProjectTask} projectId={projectId} />
                         ) : (
                           <div>{currentUserData.email}</div>
                         )}   
@@ -226,7 +227,7 @@ export default function TaskCreation({ buttonName, currentUserData, isOpen, setI
               <FormField control={form.control} name="collaborators" render={({ field }) => (
                 <FormItem>
                   <FormLabel>Collaborators</FormLabel>
-                  <FormControl><EmailCombobox value={field.value as string[]} onChange={field.onChange} placeholder="Select Collaborators..." currentUserData={currentUserData} multiple /></FormControl>
+                  <FormControl><EmailCombobox value={field.value as string[]} onChange={field.onChange} placeholder="Select Collaborators..." currentUserData={currentUserData} multiple isProjectTask={isProjectTask} projectId={projectId} /></FormControl>
                 </FormItem>
               )} />
               <FormField control={form.control} name="notes" render={({ field }) => (
