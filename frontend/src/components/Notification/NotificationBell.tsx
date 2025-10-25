@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from "react";
+﻿import { useState, useEffect, useRef } from "react";
 import { Bell } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { SidebarMenuButton, SidebarMenuItem } from "../ui/sidebar";
@@ -34,6 +34,7 @@ export const NotificationBell = () => {
     const [open, setOpen] = useState(false);
     const [loading, setLoading] = useState(false);
     const navigate = useNavigate();
+    const popupRef = useRef<HTMLDivElement | null>(null);
 
     const fetchNotifications = async () => {
         try {
@@ -101,6 +102,25 @@ export const NotificationBell = () => {
 
     const unreadCount = notifications.filter((n) => !n.is_read).length;
 
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+        if (
+            popupRef.current &&
+            !popupRef.current.contains(event.target as Node)
+        ) {
+            setOpen(false);
+        }
+        };
+
+        if (open) {
+        document.addEventListener("mousedown", handleClickOutside);
+        }
+
+        return () => {
+        document.removeEventListener("mousedown", handleClickOutside);
+        };
+    }, [open]);
+
     return (
         <div className="relative">
             <SidebarMenuItem key="notifications">
@@ -128,11 +148,11 @@ export const NotificationBell = () => {
             </SidebarMenuItem>
 
             {open && (
-                <div className="fixed top-40 left-20 w-80 bg-white shadow-lg rounded-lg border border-gray-200 z-50">
+                <div ref={popupRef} className="fixed top-40 left-20 w-80 bg-white shadow-lg rounded-lg border border-gray-200 z-50">
                     <div className="p-2 text-gray-700 font-semibold border-b flex justify-between items-center">
                         <span>Notifications</span>
                         <button
-                            onClick={() => navigate("/notifications")}
+                            onClick={() => {navigate("/notifications"); setOpen(false)}}
                             className="text-xs text-blue-500 hover:underline"
                         >
                             View All

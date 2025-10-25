@@ -17,8 +17,7 @@ import {
 	LayoutList,
 	CalendarCheck2,
 	LogOut,
-	FolderKanban,
-	Bell
+	FolderKanban
 } from "lucide-react";
 import { NotificationBell } from "@/components/Notification/NotificationBell";
 
