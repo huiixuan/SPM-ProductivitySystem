@@ -18,8 +18,9 @@ import {
 	CalendarCheck2,
 	LogOut,
 	FolderKanban,
+	Bell
 } from "lucide-react";
-import { NotificationBell } from "./Notification/NotificationBell";
+import { NotificationBell } from "@/components/Notification/NotificationBell";
 
 const items = [
 	{
@@ -29,7 +30,7 @@ const items = [
 	},
 	{
 		title: "Projects",
-		url: "/projects", // You can change this URL to your desired projects page
+		url: "/projects",
 		icon: FolderKanban,
 	},
 	{
@@ -45,7 +46,7 @@ const items = [
 ];
 
 export function AppSidebar() {
-	const { userData, handleLogout } = useAuth();
+	const { userData } = useAuth();
 
 	return (
 		<Sidebar className="p-3">
@@ -71,31 +72,39 @@ export function AppSidebar() {
 						</SidebarMenu>
 					</SidebarGroupContent>
 				</SidebarGroup>
+
+				<SidebarGroup>
+					<SidebarGroupLabel>Account</SidebarGroupLabel>
+
+					<SidebarGroupContent>
+						<SidebarMenu>
+							<NotificationBell />
+							
+							<SidebarMenuItem key="logout">
+								<SidebarMenuButton
+									asChild
+									className="text-black transition-colors hover:bg-gray-200 hover:!text-black"
+								>	
+									<Link to="/">
+										<LogOut />
+										Log Out
+									</Link>
+								</SidebarMenuButton>
+							</SidebarMenuItem>
+						</SidebarMenu>
+					</SidebarGroupContent>
+				</SidebarGroup>
 			</SidebarContent>
 
 			<SidebarFooter>
 				<Separator />
-				<div className="flex items-center justify-between p-2"></div>
-				<NotificationBell />
-				<SidebarMenu>
-					<SidebarMenuItem key={userData.email}>
-						<SidebarMenuButton
-							asChild
-							className="text-black transition-colors hover:bg-gray-200 hover:!text-black"
-						>
-							<div>
-								<div className="border border-gray-300 rounded-lg w-8 h-8 flex items-center justify-center">
-									{userData.email.slice(0, 1)}
-								</div>
-								{userData.email}
-								<LogOut
-									onClick={() => handleLogout()}
-									size={16}
-								/>
-							</div>
-						</SidebarMenuButton>
-					</SidebarMenuItem>
-				</SidebarMenu>
+				<div className="flex flex-row gap-2 justify-center items-center">
+						<div className="border border-gray-300 rounded-lg w-8 h-8 flex items-center justify-center">
+							{userData.email.slice(0, 1)}
+						</div>
+						
+						{userData.email}
+				</div>
 			</SidebarFooter>
 		</Sidebar>
 	);

@@ -1,6 +1,7 @@
 ﻿import { useState, useEffect } from "react";
 import { Bell } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { SidebarMenuButton, SidebarMenuItem } from "../ui/sidebar";
 
 interface NotificationPayload {
     project_name?: string;
@@ -102,24 +103,32 @@ export const NotificationBell = () => {
 
     return (
         <div className="relative">
-            <button
-                onClick={() => {
-                    setOpen(!open);
-                    fetchNotifications(); // Refresh when opening
-                }}
-                className="relative p-2 text-gray-800 hover:text-gray-600"
-                disabled={loading}
-            >
-                <Bell className="w-5 h-5" />
-                {unreadCount > 0 && (
-                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full px-1 min-w-4 h-4 flex items-center justify-center">
-                        {unreadCount}
-                    </span>
-                )}
-            </button>
+            <SidebarMenuItem key="notifications">
+                <SidebarMenuButton 
+                    onClick={() => {
+                        setOpen(!open);
+                        fetchNotifications();
+                    }}
+                    disabled={loading}
+                    asChild
+                    className="text-black transition-colors hover:bg-gray-200 hover:!text-black"
+                >   
+                    <div>
+                    <div className="relative">
+                        <Bell className="w-5 h-5" />
+                        {unreadCount > 0 && (
+                            <span className="absolute -top-1 -right-2 bg-red-500 text-white text-xs rounded-full px-1 min-w-4 h-4 flex items-center justify-center">
+                                {unreadCount}
+                            </span>
+                        )}
+                    </div>
+                    <span className="font-medium">Notifications</span>
+                    </div>
+                </SidebarMenuButton>
+            </SidebarMenuItem>
 
             {open && (
-                <div className="absolute bottom-10 left-10 w-80 bg-white shadow-lg rounded-lg border border-gray-200 z-50">
+                <div className="fixed top-40 left-20 w-80 bg-white shadow-lg rounded-lg border border-gray-200 z-50">
                     <div className="p-2 text-gray-700 font-semibold border-b flex justify-between items-center">
                         <span>Notifications</span>
                         <button
