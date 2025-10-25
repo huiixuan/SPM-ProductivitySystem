@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -35,7 +35,7 @@ const formSchema = z.object({
   duedate: z.date(),
   status: z.string().min(1, "Select a status."),
   priority: z.number().min(1, "Priority is required."),
-  owner: z.string().min(1, "Task owner is required."),
+  owner: z.string(),
   collaborators: z.array(z.string()),
   notes: z.string().optional(),
   attachments: z.array(z.instanceof(File))
@@ -49,7 +49,6 @@ export default function TaskCreation({ buttonName, currentUserData, isOpen, setI
 
   const token = localStorage.getItem("token");
 
-  // Determine if the dialog's state is controlled by a parent or by itself
   const open = isOpen !== undefined ? isOpen : internalOpen;
   const setOpen = setIsOpen !== undefined ? setIsOpen : setInternalOpen;
 
@@ -69,33 +68,45 @@ export default function TaskCreation({ buttonName, currentUserData, isOpen, setI
     }
   });
 
+  useEffect(() => {
+    if (currentUserData.email) {
+      form.reset((prev) => ({
+        ...prev,
+        owner: currentUserData.email
+      }))
+    }
+  }, [currentUserData.email])
+
   async function onSubmit(values: TaskFormData) {
     const formData = new FormData();
-
+    
     formData.append("title", values.title);
     formData.append("description", values.description || "");
-    formData.append("duedate", values.duedate.toISOString());
-    formData.append("status", values.status);
-    formData.append("priority", values.priority.toString());
-    formData.append("owner", values.owner);
-    formData.append("notes", values.notes || "");
 
-    // 2. If a projectId is passed in, add it to the form data for the backend
+    const date = values.duedate
+    const formattedDate = date.getFullYear() + "-" + String(date.getMonth() + 1).padStart(2, "0") + "-" + String(date.getDate()).padStart(2, "0")
+    formData.append("duedate", formattedDate)
+    
+    formData.append("status", values.status)
+    formData.append("priority", values.priority.toString())
+    formData.append("owner", values.owner)
+    formData.append("notes", values.notes || "")
+
     if (projectId) {
-      formData.append("project_id", projectId.toString());
+      formData.append("project_id", projectId.toString())
     }
 
     if (values.collaborators.length > 0) {
       values.collaborators.forEach(collaborator => {
-        formData.append("collaborators", collaborator);
+        formData.append("collaborators", collaborator)
       });
     } else {
-      formData.append("collaborators", "[]");
+      formData.append("collaborators", "[]")
     }
 
     if (values.attachments.length > 0) {
       values.attachments.forEach(file => {
-        formData.append("attachments", file);
+        formData.append("attachments", file)
       });
     }
 
@@ -105,18 +116,18 @@ export default function TaskCreation({ buttonName, currentUserData, isOpen, setI
         headers: { Authorization: `Bearer ${token}` },
         body: formData
       });
-      const data = await res.json();
+      const data = await res.json()
 
       if (res.ok && data.success) {
-        toast.success("Task created successfully.");
-        form.reset();
-        setOpen(false);
-        onTaskCreated?.(); // 3. Call the refresh function from the parent page
+        toast.success("Task created successfully.")
+        form.reset()
+        setOpen(false)
+        onTaskCreated?.()
       } else {
-        toast.error(`Task creation failed: ${data.error || "Unknown error"}`);
+        toast.error(`Task creation failed: ${data.error || "Unknown error"}`)
       }
     } catch (error) {
-      toast.error("Task creation failed: " + error);
+      toast.error("Task creation failed: " + error)
     }
   }
 
@@ -125,18 +136,18 @@ export default function TaskCreation({ buttonName, currentUserData, isOpen, setI
       open={open} 
       onOpenChange={(isOpen) => {
         if (!isOpen) {
-          form.reset();
+          form.reset()
         }
-        setOpen(isOpen);
+        setOpen(isOpen)
     }}>
-      {/* 4. Only show the trigger button if it's not being controlled by a parent */}
+
       {buttonName && (
         <DialogTrigger asChild>
           <Button variant="outline"><Plus /> {buttonName}</Button>
         </DialogTrigger>
       )}
 
-      <DialogContent className="sm:max-w-[825px]">
+      <DialogContent className="sm:max-w-[830px]">
         <DialogHeader>
           <DialogTitle>Add New Task</DialogTitle>
           <DialogDescription>
@@ -146,7 +157,7 @@ export default function TaskCreation({ buttonName, currentUserData, isOpen, setI
 
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)}>
-            <div className="flex flex-col gap-4 max-h-[70vh] overflow-y-auto pr-2">
+            <div className="flex flex-col gap-4 max-h-[70vh] overflow-y-auto pr-2 pl-1">
               <FormField control={form.control} name="title" render={({ field, fieldState }) => (
                 <FormItem>
                   <FormLabel>Title</FormLabel>
@@ -205,7 +216,7 @@ export default function TaskCreation({ buttonName, currentUserData, isOpen, setI
                       {["manager", "director"].includes(currentUserData.role) ? (
                           <EmailCombobox value={field.value} onChange={field.onChange} placeholder="Select Task Owner..." currentUserData={currentUserData} />
                         ) : (
-                          <Input className="text-black" {...field} disabled />
+                          <div>{currentUserData.email}</div>
                         )}   
                     </FormControl>
                     {fieldState.error && (<p className="text-red-700">{fieldState.error.message}</p>)}
