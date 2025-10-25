@@ -124,7 +124,7 @@ export default function ProjectDetailPage() {
           <>
             <UpdateProjectDialog isOpen={isEditDialogOpen} setIsOpen={setIsEditDialogOpen} project={project} currentUserData={userData} onUpdateSuccess={handleUpdateSuccess}/>
             
-            <TaskCreation isOpen={isCreateTaskOpen} setIsOpen={setIsCreateTaskOpen} buttonName="" currentUserData={userData} projectId={project.id} onTaskCreated={handleTaskChange} />
+            <TaskCreation isOpen={isCreateTaskOpen} setIsOpen={setIsCreateTaskOpen} buttonName="" currentUserData={userData} projectId={project.id} onTaskCreated={handleTaskChange} isProjectTask={true} />
 
             <AddExistingTaskDialog isOpen={isAddTaskOpen} setIsOpen={setIsAddTaskOpen} projectId={project.id} onTaskLinked={handleTaskChange} />
           </>

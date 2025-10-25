@@ -25,11 +25,15 @@ type OwnerSelectionProps = {
   onChange?: (value: string | string[]) => void,
   placeholder?: string,
   currentUserData: UserData,
-  multiple?: boolean
+  multiple?: boolean,
+  isProjectTask?: boolean,
+  projectId?: number
 }
 
 type UserOption = {
+  id: number,
   role: string,
+  name: string,
   email: string
 }
 
@@ -38,7 +42,9 @@ export default function EmailCombobox({
   onChange, 
   placeholder = "Select email...", 
   currentUserData,
-  multiple = false
+  multiple = false,
+  isProjectTask = false,
+  projectId
 }: OwnerSelectionProps) {
   const [open, setOpen] = useState<boolean>(false)
   const [selected, setSelected] = useState<string[]>(Array.isArray(value) ? value : value ? [value] : [])
@@ -64,7 +70,12 @@ export default function EmailCombobox({
   }, [value])
 
   useEffect(() => {
-    fetch("/api/user/get-all-users", {
+    let endpoint = "/api/user/get-all-users"
+    if (isProjectTask) {
+      endpoint = `/api/project/get-project-users/${projectId}`
+    }
+
+    fetch(endpoint, {
       method: "GET",
       headers: {
         Authorization: `Bearer ${token}`

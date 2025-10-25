@@ -23,8 +23,13 @@ def validate_login(email, password):
 
 def get_users_info():
     try:
-        users_data = User.query.with_entities(User.role, User.email).all()
-        return [{"role": role.value, "email": email} for role, email in users_data]
+        users = User.query.all()
+        users_data = [
+            {"id": user.id, "role": user.role.value, "name": user.name, "email": user.email} 
+            for user in users
+        ]
+
+        return users_data
     
     except SQLAlchemyError as e:
         return jsonify({"error": "Database error", "message": "Unable to fetch users."})
