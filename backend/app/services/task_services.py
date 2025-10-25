@@ -1,6 +1,7 @@
 import json
 from app.models import db, Task, Attachment, User, Project
-from app.services.user_services import get_user_by_email
+from app.services.user_services import get_user_by_email, get_users_info
+from app.services.project_services import get_project_users
 from app.models import TaskStatus
 from sqlalchemy.exc import SQLAlchemyError
 from datetime import datetime
@@ -101,17 +102,9 @@ def get_project_users_for_tasks(task_id):
         
         project_id = task.project_id
         if not project_id:
-            raise ValueError(f"Task with task ID {task_id} does not belong to a project")
+            return get_users_info()
         
-        project = Project.query.get(project_id)
-        project_users = [project.owner] + project.collaborators
-
-        users_data = [
-            {"id": user.id, "role": user.role.value, "name": user.name, "email": user.email}
-            for user in project_users
-        ]
-
-        return users_data
+        return get_project_users(project_id)
     
     except SQLAlchemyError as e:
         db.session.rollback()
