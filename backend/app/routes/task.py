@@ -106,8 +106,17 @@ def get_project_tasks_route(project_id):
     
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
+    
+@task_bp.route("/get-project-users-for-task/<int:task_id>", methods=["GET"])
+@jwt_required()
+def get_project_users_for_task_route(task_id):
+    try:
+        users = task_services.get_project_users_for_tasks(task_id)
+        return jsonify(users), 200
+    
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
 
-# 3. Add the new route to get tasks not assigned to a project
 @task_bp.route("/get-unassigned-tasks", methods=["GET"])
 @jwt_required()
 def get_unassigned_tasks_route():
@@ -118,7 +127,6 @@ def get_unassigned_tasks_route():
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 
-# 4. Add the new route to link an existing task to a project
 @task_bp.route("/link-task", methods=["POST"])
 @jwt_required()
 def link_task_route():

@@ -5,7 +5,7 @@ from app.services import notification_services
 
 comments_bp = Blueprint("comments", __name__)
 
-@comments_bp.route("/task/<int:task_id>/comments", methods=["POST"])
+@comments_bp.route("/save-comment/<int:task_id>", methods=["POST"])
 @jwt_required()
 def create_comment(task_id):
     data = request.get_json()
@@ -39,7 +39,7 @@ def create_comment(task_id):
         }
     }), 201
 
-@comments_bp.route("/task/<int:task_id>/comments", methods=["GET"])
+@comments_bp.route("/get-comments/<int:task_id>", methods=["GET"])
 @jwt_required()
 def get_comments(task_id):
     comments = Comment.query.filter_by(task_id=task_id).order_by(Comment.created_at.desc()).all()

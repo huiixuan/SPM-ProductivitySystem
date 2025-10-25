@@ -92,6 +92,30 @@ def get_project_tasks(project_id):
     except SQLAlchemyError as e:
         db.session.rollback()
         raise RuntimeError(f"Database error while retrieving tasks of project {project_id}: {e}")
+    
+def get_project_users_for_tasks(task_id):
+    try:
+        task = Task.query.get(task_id)
+        if not task:
+            raise ValueError(f"Task with task ID {task_id} not found")
+        
+        project_id = task.project_id
+        if not project_id:
+            raise ValueError(f"Task with task ID {task_id} does not belong to a project")
+        
+        project = Project.query.get(project_id)
+        project_users = [project.owner] + project.collaborators
+
+        users_data = [
+            {"id": user.id, "role": user.role.value, "name": user.name, "email": user.email}
+            for user in project_users
+        ]
+
+        return users_data
+    
+    except SQLAlchemyError as e:
+        db.session.rollback()
+        raise RuntimeError(f"Database error while retrieving users of project {project_id}: {e}")
 
 def get_unassigned_tasks():
     try:

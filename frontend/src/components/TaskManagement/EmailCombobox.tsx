@@ -29,7 +29,9 @@ type OwnerSelectionProps = {
 }
 
 type UserOption = {
+  id: number,
   role: string,
+  name: string,
   email: string
 }
 
