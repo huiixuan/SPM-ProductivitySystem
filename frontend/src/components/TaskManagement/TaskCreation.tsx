@@ -5,251 +5,434 @@ import { z } from "zod";
 import EmailCombobox from "@/components/TaskManagement/EmailCombobox";
 import DatePicker from "@/components/TaskManagement/DatePicker";
 import UploadAttachments from "@/components/TaskManagement/UploadAttachments";
-import { Form, FormControl, FormField, FormItem, FormLabel } from "@/components/ui/form";
+import {
+	Form,
+	FormControl,
+	FormField,
+	FormItem,
+	FormLabel,
+} from "@/components/ui/form";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import {
+	Dialog,
+	DialogClose,
+	DialogContent,
+	DialogDescription,
+	DialogFooter,
+	DialogHeader,
+	DialogTitle,
+	DialogTrigger,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "@/components/ui/select";
 import { toast } from "sonner";
 import { Plus } from "lucide-react";
 
 interface UserData {
-  role: string;
-  email: string;
+	role: string;
+	email: string;
 }
 
 // 1. Update props to allow controlling the dialog from a parent
 type TaskCreationProps = {
-  buttonName: string;
-  currentUserData: UserData;
-  isOpen?: boolean;
-  setIsOpen?: (open: boolean) => void;
-  projectId?: number;
-  onTaskCreated?: () => void;
-  isProjectTask?: boolean
+	buttonName: string;
+	currentUserData: UserData;
+	isOpen?: boolean;
+	setIsOpen?: (open: boolean) => void;
+	projectId?: number;
+	onTaskCreated?: () => void;
+	isProjectTask?: boolean;
 };
 
 const formSchema = z.object({
-  title: z.string().min(1, "Title is required."),
-  description: z.string().optional(),
-  duedate: z.date(),
-  status: z.string().min(1, "Select a status."),
-  priority: z.number().min(1, "Priority is required."),
-  owner: z.string(),
-  collaborators: z.array(z.string()),
-  notes: z.string().optional(),
-  attachments: z.array(z.instanceof(File))
+	title: z.string().min(1, "Title is required."),
+	description: z.string().optional(),
+	duedate: z.date(),
+	status: z.string().min(1, "Select a status."),
+	priority: z.number().min(1, "Priority is required."),
+	owner: z.string(),
+	collaborators: z.array(z.string()),
+	notes: z.string().optional(),
+	attachments: z.array(z.instanceof(File)),
 });
 type TaskFormData = z.infer<typeof formSchema>;
 
-export default function TaskCreation({ buttonName, currentUserData, isOpen, setIsOpen, projectId, onTaskCreated, isProjectTask }: TaskCreationProps) {
-  const [internalOpen, setInternalOpen] = useState<boolean>(false);
-  const statuses = ["Unassigned", "Ongoing", "Pending Review", "Completed"];
-  const priorities = Array.from({ length: 10 }, (_, i) => i + 1);
+export default function TaskCreation({
+	buttonName,
+	currentUserData,
+	isOpen,
+	setIsOpen,
+	projectId,
+	onTaskCreated,
+	isProjectTask,
+}: TaskCreationProps) {
+	const [internalOpen, setInternalOpen] = useState<boolean>(false);
+	const statuses = ["Unassigned", "Ongoing", "Pending Review", "Completed"];
+	const priorities = Array.from({ length: 10 }, (_, i) => i + 1);
 
-  const token = localStorage.getItem("token");
+	const token = localStorage.getItem("token");
 
-  const open = isOpen !== undefined ? isOpen : internalOpen;
-  const setOpen = setIsOpen !== undefined ? setIsOpen : setInternalOpen;
+	const open = isOpen !== undefined ? isOpen : internalOpen;
+	const setOpen = setIsOpen !== undefined ? setIsOpen : setInternalOpen;
 
-  const form = useForm<TaskFormData>({
-    resolver: zodResolver(formSchema),
-    mode: "onChange",
-    defaultValues: {
-      title: "",
-      description: "",
-      duedate: new Date(),
-      status: "Unassigned",
-      priority: 1,
-      owner: currentUserData.email,
-      collaborators: [] as string[],
-      notes: "",
-      attachments: [] as File[],
-    }
-  });
+	const form = useForm<TaskFormData>({
+		resolver: zodResolver(formSchema),
+		mode: "onChange",
+		defaultValues: {
+			title: "",
+			description: "",
+			duedate: new Date(),
+			status: "Unassigned",
+			priority: 1,
+			owner: currentUserData.email,
+			collaborators: [] as string[],
+			notes: "",
+			attachments: [] as File[],
+		},
+	});
 
-  useEffect(() => {
-    if (currentUserData.email) {
-      form.reset((prev) => ({
-        ...prev,
-        owner: currentUserData.email
-      }))
-    }
-  }, [currentUserData.email])
+	useEffect(() => {
+		if (currentUserData.email) {
+			form.reset((prev) => ({
+				...prev,
+				owner: currentUserData.email,
+			}));
+		}
+	}, [currentUserData.email, form]);
 
-  async function onSubmit(values: TaskFormData) {
-    const formData = new FormData();
-    
-    formData.append("title", values.title);
-    formData.append("description", values.description || "");
+	async function onSubmit(values: TaskFormData) {
+		const formData = new FormData();
 
-    const date = values.duedate
-    const formattedDate = date.getFullYear() + "-" + String(date.getMonth() + 1).padStart(2, "0") + "-" + String(date.getDate()).padStart(2, "0")
-    formData.append("duedate", formattedDate)
-    
-    formData.append("status", values.status)
-    formData.append("priority", values.priority.toString())
-    formData.append("owner", values.owner)
-    formData.append("notes", values.notes || "")
+		formData.append("title", values.title);
+		formData.append("description", values.description || "");
 
-    if (projectId) {
-      formData.append("project_id", projectId.toString())
-    }
+		const date = values.duedate;
+		const formattedDate =
+			date.getFullYear() +
+			"-" +
+			String(date.getMonth() + 1).padStart(2, "0") +
+			"-" +
+			String(date.getDate()).padStart(2, "0");
+		formData.append("duedate", formattedDate);
 
-    if (values.collaborators.length > 0) {
-      values.collaborators.forEach(collaborator => {
-        formData.append("collaborators", collaborator)
-      });
-    } else {
-      formData.append("collaborators", "[]")
-    }
+		formData.append("status", values.status);
+		formData.append("priority", values.priority.toString());
+		formData.append("owner", values.owner);
+		formData.append("notes", values.notes || "");
 
-    if (values.attachments.length > 0) {
-      values.attachments.forEach(file => {
-        formData.append("attachments", file)
-      });
-    }
+		if (projectId) {
+			formData.append("project_id", projectId.toString());
+		}
 
-    try {
-      const res = await fetch("/api/task/create-task", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-        body: formData
-      });
-      const data = await res.json()
+		if (values.collaborators.length > 0) {
+			values.collaborators.forEach((collaborator) => {
+				formData.append("collaborators", collaborator);
+			});
+		} else {
+			formData.append("collaborators", "[]");
+		}
 
-      if (res.ok && data.success) {
-        toast.success("Task created successfully.")
-        form.reset()
-        setOpen(false)
-        onTaskCreated?.()
-      } else {
-        toast.error(`Task creation failed: ${data.error || "Unknown error"}`)
-      }
-    } catch (error) {
-      toast.error("Task creation failed: " + error)
-    }
-  }
+		if (values.attachments.length > 0) {
+			values.attachments.forEach((file) => {
+				formData.append("attachments", file);
+			});
+		}
 
-  return (
-    <Dialog 
-      open={open} 
-      onOpenChange={(isOpen) => {
-        if (!isOpen) {
-          form.reset()
-        }
-        setOpen(isOpen)
-    }}>
+		try {
+			const res = await fetch("/api/task/create-task", {
+				method: "POST",
+				headers: { Authorization: `Bearer ${token}` },
+				body: formData,
+			});
+			const data = await res.json();
 
-      {buttonName && (
-        <DialogTrigger asChild>
-          <Button variant="outline"><Plus /> {buttonName}</Button>
-        </DialogTrigger>
-      )}
+			if (res.ok && data.success) {
+				toast.success("Task created successfully.");
+				form.reset();
+				setOpen(false);
+				onTaskCreated?.();
+			} else {
+				toast.error(
+					`Task creation failed: ${data.error || "Unknown error"}`
+				);
+			}
+		} catch (error) {
+			toast.error("Task creation failed: " + error);
+		}
+	}
 
-      <DialogContent className="sm:max-w-[830px]">
-        <DialogHeader>
-          <DialogTitle>Add New Task</DialogTitle>
-          <DialogDescription>
-            Fill in the details below to add a new task.
-          </DialogDescription>
-        </DialogHeader>
+	return (
+		<Dialog
+			open={open}
+			onOpenChange={(isOpen) => {
+				if (!isOpen) {
+					form.reset();
+				}
+				setOpen(isOpen);
+			}}
+		>
+			{buttonName && (
+				<DialogTrigger asChild>
+					<Button variant="outline">
+						<Plus /> {buttonName}
+					</Button>
+				</DialogTrigger>
+			)}
 
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)}>
-            <div className="flex flex-col gap-4 max-h-[70vh] overflow-y-auto pr-2 pl-1">
-              <FormField control={form.control} name="title" render={({ field, fieldState }) => (
-                <FormItem>
-                  <FormLabel>Title</FormLabel>
-                  <FormControl><Input {...field} /></FormControl>
-                  {fieldState.error && (<p className="text-red-700">{fieldState.error.message}</p>)}
-                </FormItem>
-              )} />
-              <FormField control={form.control} name="description" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Description</FormLabel>
-                  <FormControl><Textarea {...field} /></FormControl>
-                </FormItem>
-              )} />
-              <div className="flex flex-row gap-2">
-                <FormField control={form.control} name="duedate" render={({ field, fieldState }) => (
-                  <FormItem className="w-1/2">
-                    <FormLabel>Due Date</FormLabel>
-                    <FormControl><DatePicker date={field.value} onChange={field.onChange} /></FormControl>
-                    {fieldState.error && (<p className="text-red-700">{fieldState.error.message}</p>)}
-                  </FormItem>
-                )} />
-                <FormField control={form.control} name="status" render={({ field, fieldState }) => (
-                  <FormItem className="w-1/2">
-                    <FormLabel>Status</FormLabel>
-                    <FormControl>
-                      <Select onValueChange={field.onChange} value={field.value}>
-                        <SelectTrigger className="w-full"><SelectValue placeholder="Status" /></SelectTrigger>
-                        <SelectContent>
-                          {statuses.map(status => (<SelectItem key={status} value={status}>{status}</SelectItem>))}
-                        </SelectContent>
-                      </Select>
-                    </FormControl>
-                    {fieldState.error && (<p className="text-red-700">{fieldState.error.message}</p>)}
-                  </FormItem>
-                )} />
-              </div>
-              <div className="flex flex-row gap-2">
-                <FormField control={form.control} name="priority" render={({ field, fieldState }) => (
-                  <FormItem className="w-1/2">
-                    <FormLabel>Priority</FormLabel>
-                    <FormControl>
-                      <Select onValueChange={(value) => field.onChange(parseInt(value, 10))} value={field.value?.toString()}>
-                        <SelectTrigger className="w-full"><SelectValue placeholder="Priority" /></SelectTrigger>
-                        <SelectContent>
-                          {priorities.map(p => (<SelectItem key={p} value={p.toString()}>{p}</SelectItem>))}
-                        </SelectContent>
-                      </Select>
-                    </FormControl>
-                    {fieldState.error && (<p className="text-red-700">{fieldState.error.message}</p>)}
-                  </FormItem>
-                )} />
-                <FormField control={form.control} name="owner" render={({ field, fieldState }) => (
-                  <FormItem className="w-1/2">
-                    <FormLabel>Task Owner</FormLabel>
-                    <FormControl>
-                      {["manager", "director"].includes(currentUserData.role) ? (
-                          <EmailCombobox value={field.value} onChange={field.onChange} placeholder="Select Task Owner..." currentUserData={currentUserData} isProjectTask={isProjectTask} projectId={projectId} />
-                        ) : (
-                          <div>{currentUserData.email}</div>
-                        )}   
-                    </FormControl>
-                    {fieldState.error && (<p className="text-red-700">{fieldState.error.message}</p>)}
-                  </FormItem>
-                )} />
-              </div>
-              <FormField control={form.control} name="collaborators" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Collaborators</FormLabel>
-                  <FormControl><EmailCombobox value={field.value as string[]} onChange={field.onChange} placeholder="Select Collaborators..." currentUserData={currentUserData} multiple isProjectTask={isProjectTask} projectId={projectId} /></FormControl>
-                </FormItem>
-              )} />
-              <FormField control={form.control} name="notes" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Notes</FormLabel>
-                  <FormControl><Textarea {...field} /></FormControl>
-                </FormItem>
-              )} />
-              <FormField control={form.control} name="attachments" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Attachments</FormLabel>
-                  <FormControl><UploadAttachments value={field.value} onChange={field.onChange} /></FormControl>
-                </FormItem>
-              )} />
-            </div>
-            <DialogFooter className="pt-4">
-              <DialogClose asChild><Button variant="outline">Cancel</Button></DialogClose>
-              <Button type="submit" disabled={!form.formState.isValid}>Create Task</Button>
-            </DialogFooter>
-          </form>
-        </Form>
-      </DialogContent>
-    </Dialog>
-  );
+			<DialogContent className="sm:max-w-[830px]">
+				<DialogHeader>
+					<DialogTitle>Add New Task</DialogTitle>
+					<DialogDescription>
+						Fill in the details below to add a new task.
+					</DialogDescription>
+				</DialogHeader>
+
+				<Form {...form}>
+					<form onSubmit={form.handleSubmit(onSubmit)}>
+						<div className="flex flex-col gap-4 max-h-[70vh] overflow-y-auto pr-2 pl-1">
+							<FormField
+								control={form.control}
+								name="title"
+								render={({ field, fieldState }) => (
+									<FormItem>
+										<FormLabel>Title</FormLabel>
+										<FormControl>
+											<Input {...field} />
+										</FormControl>
+										{fieldState.error && (
+											<p className="text-red-700">
+												{fieldState.error.message}
+											</p>
+										)}
+									</FormItem>
+								)}
+							/>
+							<FormField
+								control={form.control}
+								name="description"
+								render={({ field }) => (
+									<FormItem>
+										<FormLabel>Description</FormLabel>
+										<FormControl>
+											<Textarea {...field} />
+										</FormControl>
+									</FormItem>
+								)}
+							/>
+							<div className="flex flex-row gap-2">
+								<FormField
+									control={form.control}
+									name="duedate"
+									render={({ field, fieldState }) => (
+										<FormItem className="w-1/2">
+											<FormLabel>Due Date</FormLabel>
+											<FormControl>
+												<DatePicker
+													date={field.value}
+													onChange={field.onChange}
+												/>
+											</FormControl>
+											{fieldState.error && (
+												<p className="text-red-700">
+													{fieldState.error.message}
+												</p>
+											)}
+										</FormItem>
+									)}
+								/>
+								<FormField
+									control={form.control}
+									name="status"
+									render={({ field, fieldState }) => (
+										<FormItem className="w-1/2">
+											<FormLabel>Status</FormLabel>
+											<FormControl>
+												<Select
+													onValueChange={
+														field.onChange
+													}
+													value={field.value}
+												>
+													<SelectTrigger className="w-full">
+														<SelectValue placeholder="Status" />
+													</SelectTrigger>
+													<SelectContent>
+														{statuses.map(
+															(status) => (
+																<SelectItem
+																	key={status}
+																	value={
+																		status
+																	}
+																>
+																	{status}
+																</SelectItem>
+															)
+														)}
+													</SelectContent>
+												</Select>
+											</FormControl>
+											{fieldState.error && (
+												<p className="text-red-700">
+													{fieldState.error.message}
+												</p>
+											)}
+										</FormItem>
+									)}
+								/>
+							</div>
+							<div className="flex flex-row gap-2">
+								<FormField
+									control={form.control}
+									name="priority"
+									render={({ field, fieldState }) => (
+										<FormItem className="w-1/2">
+											<FormLabel>Priority</FormLabel>
+											<FormControl>
+												<Select
+													onValueChange={(value) =>
+														field.onChange(
+															parseInt(value, 10)
+														)
+													}
+													value={field.value?.toString()}
+												>
+													<SelectTrigger className="w-full">
+														<SelectValue placeholder="Priority" />
+													</SelectTrigger>
+													<SelectContent>
+														{priorities.map((p) => (
+															<SelectItem
+																key={p}
+																value={p.toString()}
+															>
+																{p}
+															</SelectItem>
+														))}
+													</SelectContent>
+												</Select>
+											</FormControl>
+											{fieldState.error && (
+												<p className="text-red-700">
+													{fieldState.error.message}
+												</p>
+											)}
+										</FormItem>
+									)}
+								/>
+								<FormField
+									control={form.control}
+									name="owner"
+									render={({ field, fieldState }) => (
+										<FormItem className="w-1/2">
+											<FormLabel>Task Owner</FormLabel>
+											<FormControl>
+												{[
+													"manager",
+													"director",
+												].includes(
+													currentUserData.role
+												) ? (
+													<EmailCombobox
+														value={field.value}
+														onChange={
+															field.onChange
+														}
+														placeholder="Select Task Owner..."
+														currentUserData={
+															currentUserData
+														}
+														isProjectTask={
+															isProjectTask
+														}
+														projectId={projectId}
+													/>
+												) : (
+													<div>
+														{currentUserData.email}
+													</div>
+												)}
+											</FormControl>
+											{fieldState.error && (
+												<p className="text-red-700">
+													{fieldState.error.message}
+												</p>
+											)}
+										</FormItem>
+									)}
+								/>
+							</div>
+							<FormField
+								control={form.control}
+								name="collaborators"
+								render={({ field }) => (
+									<FormItem>
+										<FormLabel>Collaborators</FormLabel>
+										<FormControl>
+											<EmailCombobox
+												value={field.value as string[]}
+												onChange={field.onChange}
+												placeholder="Select Collaborators..."
+												currentUserData={
+													currentUserData
+												}
+												multiple
+												isProjectTask={isProjectTask}
+												projectId={projectId}
+											/>
+										</FormControl>
+									</FormItem>
+								)}
+							/>
+							<FormField
+								control={form.control}
+								name="notes"
+								render={({ field }) => (
+									<FormItem>
+										<FormLabel>Notes</FormLabel>
+										<FormControl>
+											<Textarea {...field} />
+										</FormControl>
+									</FormItem>
+								)}
+							/>
+							<FormField
+								control={form.control}
+								name="attachments"
+								render={({ field }) => (
+									<FormItem>
+										<FormLabel>Attachments</FormLabel>
+										<FormControl>
+											<UploadAttachments
+												value={field.value}
+												onChange={field.onChange}
+											/>
+										</FormControl>
+									</FormItem>
+								)}
+							/>
+						</div>
+						<DialogFooter className="pt-4">
+							<DialogClose asChild>
+								<Button variant="outline">Cancel</Button>
+							</DialogClose>
+							<Button
+								type="submit"
+								disabled={!form.formState.isValid}
+							>
+								Create Task
+							</Button>
+						</DialogFooter>
+					</form>
+				</Form>
+			</DialogContent>
+		</Dialog>
+	);
 }
