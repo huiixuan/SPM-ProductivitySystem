@@ -8,8 +8,10 @@ import AddExistingTaskDialog from "@/components/ProjectManagement/AddExistingTas
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Edit, Plus, Link as LinkIcon } from "lucide-react";
 import { toast } from "sonner";
+// --- Cleaned up imports ---
+import { ArrowLeft, Edit, Plus, Link as LinkIcon, BarChart } from "lucide-react"; 
+import ProjectReportDialog from "@/components/ProjectManagement/ProjectReportDialog"; 
 
 interface Project {
   id: number;
@@ -28,11 +30,13 @@ export default function ProjectDetailPage() {
   const [project, setProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
   
-
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isCreateTaskOpen, setIsCreateTaskOpen] = useState(false);
   const [isAddTaskOpen, setIsAddTaskOpen] = useState(false);
   const [refreshTasksKey, setRefreshTasksKey] = useState(0); 
+
+  // --- New state for Report Dialog ---
+  const [isReportOpen, setIsReportOpen] = useState(false);
 
   const navigate = useNavigate();
   const { userData } = useAuth();
@@ -95,6 +99,12 @@ export default function ProjectDetailPage() {
             <Button variant="outline" onClick={() => setIsAddTaskOpen(true)}>
                 <LinkIcon className="mr-2 h-4 w-4" /> Add Existing Task
             </Button>
+            
+            {/* --- New Report Button --- */}
+            <Button variant="outline" onClick={() => setIsReportOpen(true)}>
+                <BarChart className="mr-2 h-4 w-4" /> Generate Report
+            </Button>
+
             <Button variant="outline" onClick={() => setIsEditDialogOpen(true)}>
                 <Edit className="mr-2 h-4 w-4" /> Edit Project
             </Button>
@@ -127,6 +137,14 @@ export default function ProjectDetailPage() {
             <TaskCreation isOpen={isCreateTaskOpen} setIsOpen={setIsCreateTaskOpen} buttonName="" currentUserData={userData} projectId={project.id} onTaskCreated={handleTaskChange} isProjectTask={true} />
 
             <AddExistingTaskDialog isOpen={isAddTaskOpen} setIsOpen={setIsAddTaskOpen} projectId={project.id} onTaskLinked={handleTaskChange} />
+
+            {/* --- Render the new Report Dialog --- */}
+            <ProjectReportDialog 
+              isOpen={isReportOpen} 
+              setIsOpen={setIsReportOpen} 
+              projectId={project.id} 
+              projectName={project.name} 
+            />
           </>
       )}
     </div>

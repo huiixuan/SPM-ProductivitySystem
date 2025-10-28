@@ -1,9 +1,12 @@
 import json
-from app.models import db, Project, Attachment, User, ProjectStatus
+# --- Imports are correct ---
+from app.models import db, Project, Attachment, User, ProjectStatus, Task, TaskStatus
 from app.services.user_services import get_user_by_email
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy import func 
 from datetime import datetime
 
+# ... (all other functions: create_project, get_all_projects, etc. stay the same) ...
 def create_project(name, description, deadline, status, owner_email, collaborator_emails, attachments, notes):
     try:
         owner = get_user_by_email(owner_email)
@@ -46,18 +49,12 @@ def create_project(name, description, deadline, status, owner_email, collaborato
 
 def get_all_projects(user_id):
     try:
-        # 2. Find the user object based on the provided ID
         user = User.query.get(user_id)
         if not user:
-            return [] # Return an empty list if the user isn't found
-
-        # 3. Perform a query that finds projects where the user is either the
-        #    owner OR is listed as a collaborator.
-        #    Use .distinct() to avoid duplicates.
+            return []
         projects = Project.query.filter(
             (Project.owner_id == user.id) | (Project.collaborators.contains(user))
         ).distinct().all()
-        
         return projects
     except SQLAlchemyError as e:
         raise RuntimeError(f"Database error while fetching projects: {e}")
@@ -71,32 +68,27 @@ def get_project_by_id(project_id):
         return project
     except SQLAlchemyError as e:
         raise RuntimeError(f"Database error while fetching project {project_id}: {e}")
-# ------------------------------------
 
 def get_project_users(project_id):
     try:
         project = Project.query.get(project_id)
         if not project:
             raise ValueError(f"Project with ID {project_id} not found.")
-        
         users = [project.owner] + project.collaborators
         users_data = [
             {"id": user.id, "role": user.role.value, "name": user.name, "email": user.email}
             for user in users
         ]
-
         return users_data
     except SQLAlchemyError as e:
         raise RuntimeError(f"Database error while fetching project {project_id}: {e}")
 
-# Update the function signature to accept the 'collaborator_emails' list
 def update_project(project_id, data, new_files, collaborator_emails=None):
     try:
         project = Project.query.get(project_id)
         if not project:
             raise ValueError(f"Project with ID {project_id} not found.")
 
-        # Update simple fields
         if "name" in data: project.name = data["name"]
         if "description" in data: project.description = data["description"]
         if "notes" in data: project.notes = data["notes"]
@@ -104,12 +96,10 @@ def update_project(project_id, data, new_files, collaborator_emails=None):
         if "deadline" in data and data["deadline"]:
             project.deadline = datetime.fromisoformat(data["deadline"].replace("Z", "+00:00")).date()
 
-        # Update owner
         if "owner" in data:
             owner = User.query.filter_by(email=data["owner"]).first()
             if owner: project.owner = owner
 
-        # FIX: Use the 'collaborator_emails' list directly instead of 'data.getlist()'
         if collaborator_emails is not None:
             project.collaborators.clear()
             for email in collaborator_emails:
@@ -117,7 +107,6 @@ def update_project(project_id, data, new_files, collaborator_emails=None):
                 if user:
                     project.collaborators.append(user)
 
-        # Update attachments (this logic is fine)
         if "existing_attachments" in data:
             existing_attachments = json.loads(data["existing_attachments"])
             existing_ids = [att.get("id") for att in existing_attachments]
@@ -137,3 +126,42 @@ def update_project(project_id, data, new_files, collaborator_emails=None):
     except Exception as e:
         db.session.rollback()
         raise e
+
+# ------------------------------------
+# THIS IS THE FUNCTION THE SERVER CAN'T FIND
+# ------------------------------------
+def get_project_report_data(project_id, user_id):
+    try:
+        project = Project.query.get(project_id)
+        if not project:
+            raise ValueError(f"Project with ID {project_id} not found.")
+
+        user = User.query.get(user_id)
+        if not user:
+            raise PermissionError("User not found.")
+        
+        if user.id != project.owner_id and user not in project.collaborators:
+            raise PermissionError("You do not have access to generate reports for this project.")
+        
+        # --- Task Counting ---
+        status_counts_query = db.session.query(
+            Task.status, 
+            func.count(Task.id)
+        ).filter(
+            Task.project_id == project_id
+        ).group_by(
+            Task.status
+        ).all()
+
+        # 1. Initialize a dictionary with ALL possible statuses from your enum
+        report_data = {status.value: 0 for status in TaskStatus}
+
+        # 2. Overwrite the 0s with the actual counts from the query
+        for status_enum, count in status_counts_query:
+            report_data[status_enum.value] = count
+        
+        # 3. Return the dictionary as-is.
+        return report_data
+
+    except SQLAlchemyError as e:
+        raise RuntimeError(f"Database error while generating report data: {e}")

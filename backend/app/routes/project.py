@@ -108,3 +108,26 @@ def update_project_route(project_id):
         print(f"Error in update_project_route for ID {project_id}: {e}")
         traceback.print_exc()
         return jsonify({"success": False, "error": str(e)}), 500
+    
+    
+
+@project_bp.route("/get-report-data/<int:project_id>", methods=["GET"])
+@jwt_required()
+def get_project_report_route(project_id):
+    try:
+        user_id = get_jwt_identity()
+        data = project_services.get_project_report_data(project_id, user_id)
+        return jsonify(data), 200
+        
+    except PermissionError as e:
+        print(f"Auth error in get_project_report_route: {e}")
+        traceback.print_exc()
+        return jsonify({"success": False, "error": str(e)}), 403 # Forbidden
+    except ValueError as e:
+        print(f"Value error in get_project_report_route: {e}")
+        traceback.print_exc()
+        return jsonify({"success": False, "error": str(e)}), 404 # Not Found
+    except Exception as e:
+        print(f"Error in get_project_report_route for ID {project_id}: {e}")
+        traceback.print_exc()
+        return jsonify({"success": False, "error": str(e)}), 500
