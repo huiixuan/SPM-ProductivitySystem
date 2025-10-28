@@ -3,7 +3,7 @@
 import pytest
 from datetime import date, timedelta
 from app import create_app, db
-from app.models import db, User, Task, Project, Notification, TaskStatus
+from app.models import db, User, Task, Project, Notification, TaskStatus, Comment, NotificationType
 from app.services import notification_service
 
 @pytest.fixture
@@ -159,4 +159,114 @@ def test_notifications_removed_when_task_deleted(app, sample_user, sample_projec
     # Check that notifications were removed automatically
     remaining_notifs = Notification.query.filter_by(task_id=task.id).count()
     assert remaining_notifs == 0  # no notifications remain
+
+
+def test_create_comment_notification_excludes_author(app, sample_user, sample_project):
+    other_user = User(email="collab@example.com", password_hash="pwd", name="Collab")
+    db.session.add(other_user)
+    db.session.commit()
+
+    task = Task(
+        title="Commented",
+        duedate=date.today() + timedelta(days=3),
+        status=TaskStatus.ONGOING,
+        owner_id=sample_user.id,
+        project_id=sample_project.id,
+    )
+    task.collaborators.append(other_user)
+    db.session.add(task)
+    db.session.commit()
+
+    comment = Comment(task_id=task.id, user_id=sample_user.id, content="A" * 60)
+    db.session.add(comment)
+    db.session.commit()
+
+    notification_service.create_comment_notification(comment)
+
+    notifs = Notification.query.filter_by(task_id=task.id).all()
+    assert len(notifs) == 1
+    assert notifs[0].user_id == other_user.id
+    assert notifs[0].payload["comment_excerpt"].endswith("...")
+
+
+def test_create_task_update_notification_skips_updater(app, sample_user, sample_project):
+    other_user = User(email="collab2@example.com", password_hash="pwd", name="Collab2")
+    db.session.add(other_user)
+    db.session.commit()
+
+    task = Task(
+        title="Updated Task",
+        duedate=date.today() + timedelta(days=4),
+        status=TaskStatus.ONGOING,
+        owner_id=sample_user.id,
+        project_id=sample_project.id,
+    )
+    task.collaborators.append(other_user)
+    db.session.add(task)
+    db.session.commit()
+
+    notification_service.create_task_update_notification(
+        task,
+        updated_by=sample_user,
+        updated_fields=[{"field": "status", "old_value": "old", "new_value": "new"}],
+    )
+
+    notif = Notification.query.filter_by(task_id=task.id).first()
+    assert notif.user_id == other_user.id
+    assert notif.payload["updated_by"] == sample_user.email
+
+
+def test_create_task_assignment_notification_skips_same_owner(app, sample_user, sample_project):
+    task = Task(
+        title="Assignment",
+        duedate=date.today() + timedelta(days=4),
+        status=TaskStatus.ONGOING,
+        owner_id=sample_user.id,
+        project_id=sample_project.id,
+    )
+    db.session.add(task)
+    db.session.commit()
+
+    notification_service.create_task_assignment_notification(task, assigned_by=sample_user, assignee=sample_user)
+    assert Notification.query.filter_by(task_id=task.id).count() == 0
+
+    other = User(email="assignee@example.com", password_hash="pwd", name="Assignee")
+    db.session.add(other)
+    db.session.commit()
+
+    notification_service.create_task_assignment_notification(task, assigned_by=sample_user, assignee=other)
+    notif = Notification.query.filter_by(task_id=task.id).first()
+    assert notif.user_id == other.id
+    assert notif.payload["assigned_by"] == sample_user.email
+
+
+def test_create_notification_payload_variants():
+    due_payload = notification_service.create_notification_payload(
+        NotificationType.DUE_DATE_REMINDER,
+        project_name="Proj",
+        task_title="Task",
+        duedate=date(2025, 1, 1),
+        days_until_due=3,
+    )
+    assert due_payload["notification_type"] == NotificationType.DUE_DATE_REMINDER.value
+    assert due_payload["days_until_due"] == 3
+
+    comment_payload = notification_service.create_notification_payload(
+        NotificationType.NEW_COMMENT,
+        project_name="Proj",
+        task_title="Task",
+        comment_author="Author",
+        comment_excerpt="Excerpt",
+        comment_id=5,
+    )
+    assert comment_payload["comment_author"] == "Author"
+
+    update_payload = notification_service.create_notification_payload(
+        NotificationType.TASK_UPDATED,
+        project_name="Proj",
+        task_title="Task",
+        updated_fields=[{"field": "status"}],
+        updated_by="actor@example.com",
+    )
+    assert update_payload["updated_by"] == "actor@example.com"
 

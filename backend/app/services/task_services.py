@@ -6,14 +6,36 @@ from app.models import TaskStatus
 from sqlalchemy.exc import SQLAlchemyError
 from datetime import datetime
 from app.services.notification_services import (
-    create_notifications_for_task, 
-    remove_notifications_for_task, 
+    create_notifications_for_task,
+    remove_notifications_for_task,
     update_notifications_for_task,
     create_comment_notification,
     create_task_update_notification,
-    create_task_assignment_notification
+    create_task_assignment_notification,
 )
 from flask_jwt_extended import get_jwt_identity
+
+class _NotificationFacade:
+    def create_notifications_for_task(self, *args, **kwargs):
+        return create_notifications_for_task(*args, **kwargs)
+
+    def remove_notifications_for_task(self, *args, **kwargs):
+        return remove_notifications_for_task(*args, **kwargs)
+
+    def update_notifications_for_task(self, *args, **kwargs):
+        return update_notifications_for_task(*args, **kwargs)
+
+    def create_comment_notification(self, *args, **kwargs):
+        return create_comment_notification(*args, **kwargs)
+
+    def create_task_update_notification(self, *args, **kwargs):
+        return create_task_update_notification(*args, **kwargs)
+
+    def create_task_assignment_notification(self, *args, **kwargs):
+        return create_task_assignment_notification(*args, **kwargs)
+
+
+notification_service = _NotificationFacade()
 
 def create_task(title, description, duedate, status, owner_email, collaborator_emails, attachments, notes, priority, project_id=None):
     try:
@@ -42,14 +64,14 @@ def create_task(title, description, duedate, status, owner_email, collaborator_e
 
         db.session.add(task)
         db.session.commit()
-        
-        create_notifications_for_task(task)
-        
+
+        notification_service.create_notifications_for_task(task)
+
         current_user_id = get_jwt_identity()
         current_user = User.query.get(int(current_user_id))
-        
+
         if current_user and current_user.id != owner.id:
-            create_task_assignment_notification(task, current_user, owner)
+            notification_service.create_task_assignment_notification(task, current_user, owner)
 
         return task
     
@@ -74,12 +96,12 @@ def get_user_tasks(owner_id):
         user = User.query.get(owner_id)
         if not user:
             return []
-            
+
         tasks = Task.query.filter(
-            (Task.owner_id == owner_id) | 
+            (Task.owner_id == owner_id) |
             (Task.collaborators.any(id=owner_id))
         ).all()
-        
+
         return tasks
     
     except SQLAlchemyError as e:
@@ -139,7 +161,7 @@ def update_task(task_id, data, new_files):
         print(f"Starting update for task {task_id}")
         print(f"Received data: {data}")
         print(f"Received files: {new_files}")
-        
+
         task = Task.query.get(task_id)
         if not task:
             raise ValueError(f"Task with task ID {task_id} not found")
@@ -161,11 +183,15 @@ def update_task(task_id, data, new_files):
                 print(f"Date parsing error: {e}")
                 raise ValueError(f"Invalid date format: {duedate}")
             
+        status_changed_to_completed = False
+
         if status := data.get("status"):
             try:
                 task.status = TaskStatus(status)
             except ValueError:
                 raise ValueError(f"Invalid status: {status}")
+            else:
+                status_changed_to_completed = task.status == TaskStatus.COMPLETED
             
         task.priority = int(data.get("priority", task.priority))
         task.notes = data.get("notes", task.notes)
@@ -176,9 +202,9 @@ def update_task(task_id, data, new_files):
                 raise ValueError(f"Owner with email {owner_email} not found")
             
             if owner.id != task.owner_id:
-                user_id = get_jwt_identity()  
+                user_id = get_jwt_identity()
                 current_user = User.query.get(int(user_id))
-                create_task_assignment_notification(task, current_user, owner)
+                notification_service.create_task_assignment_notification(task, current_user, owner)
             
             task.owner = owner
 
@@ -189,21 +215,21 @@ def update_task(task_id, data, new_files):
                     collaborators = json.loads(collaborators)
                 except json.JSONDecodeError:
                     collaborators = []
-            
+
             current_collaborator_emails = [c.email for c in task.collaborators]
             new_collaborators = [c for c in collaborators if c not in current_collaborator_emails]
-            
+
             task.collaborators.clear()
             if collaborators:
                 for email in collaborators:
                     user = User.query.filter_by(email=email).first()
                     if user:
                         task.collaborators.append(user)
-                        
+
                         if email in new_collaborators:
-                            user_id = get_jwt_identity()  
+                            user_id = get_jwt_identity()
                             current_user = User.query.get(int(user_id))
-                            create_task_assignment_notification(task, current_user, user)
+                            notification_service.create_task_assignment_notification(task, current_user, user)
 
         if "existing_attachments" in data:
             existing_attachments = data["existing_attachments"]
@@ -230,25 +256,25 @@ def update_task(task_id, data, new_files):
         db.session.commit()
 
         from sqlalchemy.orm.attributes import get_history
-        
+
         updated_fields = []
-        user_id = get_jwt_identity()  
+        user_id = get_jwt_identity()
         current_user = User.query.get(int(user_id))
         updated_by = current_user
-        
+
         field_mapping = {
             'status': ('status', lambda x: x.value if x else None),
             'duedate': ('duedate', lambda x: x.isoformat() if x else None),
             'priority': ('priority', lambda x: x),
             'owner_id': ('assignee', lambda x: User.query.get(x).email if User.query.get(x) else None)
         }
-        
+
         for field, (display_name, formatter) in field_mapping.items():
             history = get_history(task, field)
             if history.has_changes():
                 old_value = formatter(history.deleted[0]) if history.deleted else None
                 new_value = formatter(history.added[0]) if history.added else None
-                
+
                 if old_value != new_value:
                     updated_fields.append({
                         "field": display_name,
@@ -257,10 +283,13 @@ def update_task(task_id, data, new_files):
                     })
         
         if updated_fields and updated_by:
-            create_task_update_notification(task, updated_by, updated_fields)
+            notification_service.create_task_update_notification(task, updated_by, updated_fields)
 
         if 'duedate' in [change.get('field') for change in updated_fields]:
-            update_notifications_for_task(task)
+            notification_service.update_notifications_for_task(task)
+
+        if status_changed_to_completed:
+            notification_service.remove_notifications_for_task(task)
 
         return task
     

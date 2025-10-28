@@ -1,6 +1,6 @@
 import pytest
 from app import create_app
-from app.models import db, User
+from app.models import db, User, UserRole
 from app.services.user_services import create_user, get_user_by_email, validate_login
 
 @pytest.fixture
@@ -33,7 +33,7 @@ def test_create_and_get_user(app):
         assert user is not None
         assert user.name == "Alice"
         assert user.email == "alice@example.com"
-        assert user.role == "manager"
+        assert user.role == UserRole.MANAGER
         assert user.check_password("password123") is True
 
 def test_validate_login_success(app):

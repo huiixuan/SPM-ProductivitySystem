@@ -78,6 +78,8 @@ def get_task_route(task_id):
         
         return jsonify(task.to_dict()), 200
     
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 404
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
     

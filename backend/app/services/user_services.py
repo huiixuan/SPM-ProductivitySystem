@@ -1,9 +1,17 @@
-from app.models import db, User
+from app.models import db, User, UserRole
 from flask import jsonify 
 from sqlalchemy.exc import SQLAlchemyError
 
 def create_user(name, email, role, password):
     """Create and save a new user"""
+    if isinstance(role, str):
+        try:
+            role = UserRole[role.upper()]
+        except KeyError as exc:
+            raise ValueError(f"Invalid role: {role}") from exc
+    elif not isinstance(role, UserRole):
+        raise ValueError("Role must be a str or UserRole")
+
     user = User(name=name, role=role, email=email)
     user.set_password(password)
     db.session.add(user)

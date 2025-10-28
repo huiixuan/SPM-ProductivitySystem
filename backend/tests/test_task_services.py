@@ -1,5 +1,6 @@
 import pytest
 from datetime import datetime, date, timedelta
+from types import SimpleNamespace
 from unittest.mock import Mock, MagicMock, patch
 from sqlalchemy.exc import SQLAlchemyError
 from app.services.task_services import (
@@ -72,6 +73,33 @@ def mock_task():
 def default_task_status():
     """Get the default TaskStatus value"""
     return TaskStatus.UNASSIGNED
+
+
+@pytest.fixture(autouse=True)
+def mock_jwt_identity(monkeypatch):
+    monkeypatch.setattr('app.services.task_services.get_jwt_identity', lambda: 1)
+
+
+@pytest.fixture(autouse=True)
+def mock_user_query(monkeypatch, mock_user):
+    query_mock = MagicMock()
+    query_mock.get.return_value = mock_user
+    query_mock.filter_by.return_value.first.return_value = mock_user
+    user_stub = SimpleNamespace(query=query_mock)
+    monkeypatch.setattr('app.services.task_services.User', user_stub)
+    return query_mock
+
+
+@pytest.fixture(autouse=True)
+def stub_get_history(monkeypatch):
+    class _History:
+        deleted = []
+        added = []
+
+        def has_changes(self):
+            return False
+
+    monkeypatch.setattr('sqlalchemy.orm.attributes.get_history', lambda *args, **kwargs: _History())
 
 
 class TestCreateTask:
@@ -267,30 +295,36 @@ class TestGetTask:
 class TestGetUserTasks:
     """Tests for get_user_tasks function"""
 
+    @patch('app.services.task_services.User')
     @patch('app.services.task_services.Task')
-    def test_get_user_tasks_success(self, mock_task_class, mock_task):
+    def test_get_user_tasks_success(self, mock_task_class, mock_user_class, mock_task):
         """Test successful retrieval of user tasks"""
-        mock_task_class.query.filter_by.return_value.all.return_value = [mock_task]
+        mock_user_class.query.get.return_value = True
+        mock_task_class.query.filter.return_value.all.return_value = [mock_task]
 
         result = get_user_tasks(1)
 
         assert len(result) == 1
         assert result[0] == mock_task
-        mock_task_class.query.filter_by.assert_called_once_with(owner_id=1)
+        mock_task_class.query.filter.assert_called_once()
 
+    @patch('app.services.task_services.User')
     @patch('app.services.task_services.Task')
-    def test_get_user_tasks_empty(self, mock_task_class):
+    def test_get_user_tasks_empty(self, mock_task_class, mock_user_class):
         """Test retrieval when user has no tasks"""
-        mock_task_class.query.filter_by.return_value.all.return_value = []
+        mock_user_class.query.get.return_value = True
+        mock_task_class.query.filter.return_value.all.return_value = []
 
         result = get_user_tasks(1)
 
         assert result == []
 
+    @patch('app.services.task_services.User')
     @patch('app.services.task_services.Task')
-    def test_get_user_tasks_database_error(self, mock_task_class, mock_db_session):
+    def test_get_user_tasks_database_error(self, mock_task_class, mock_user_class, mock_db_session):
         """Test user tasks retrieval with database error"""
-        mock_task_class.query.filter_by.side_effect = SQLAlchemyError("Database error")
+        mock_user_class.query.get.return_value = True
+        mock_task_class.query.filter.side_effect = SQLAlchemyError("Database error")
 
         with pytest.raises(RuntimeError, match="Database error while retrieving tasks of user"):
             get_user_tasks(1)
@@ -496,7 +530,9 @@ class TestUpdateTask:
                                       mock_db_session, mock_task, mock_collaborator):
         """Test updating task collaborators"""
         mock_task_class.query.get.return_value = mock_task
-        mock_task.collaborators = Mock()
+        collaborators_mock = Mock()
+        collaborators_mock.__iter__ = Mock(return_value=iter([]))
+        mock_task.collaborators = collaborators_mock
         mock_user_class.query.filter_by.return_value.first.return_value = mock_collaborator
 
         data = {"collaborators": ["collaborator@example.com"]}
