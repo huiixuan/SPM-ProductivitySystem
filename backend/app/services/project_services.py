@@ -5,6 +5,11 @@ from app.services.user_services import get_user_by_email
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy import func 
 from datetime import datetime
+from app.services.email_services import (
+    send_project_creation_email_notification,
+    send_project_update_email_notification,
+    send_project_collaborator_added_email_notification
+)
 
 # ... (all other functions: create_project, get_all_projects, etc. stay the same) ...
 def create_project(name, description, deadline, status, owner_email, collaborator_emails, attachments, notes):
@@ -41,6 +46,16 @@ def create_project(name, description, deadline, status, owner_email, collaborato
 
         db.session.add(project)
         db.session.commit()
+        
+        # Get current user for email notification
+        from flask_jwt_extended import get_jwt_identity
+        current_user_id = get_jwt_identity()
+        current_user = User.query.get(int(current_user_id))
+        
+        # Send project creation email notification
+        if current_user:
+            send_project_creation_email_notification(project, current_user)
+        
         return project
     
     except SQLAlchemyError as e:
@@ -89,24 +104,66 @@ def update_project(project_id, data, new_files, collaborator_emails=None):
         if not project:
             raise ValueError(f"Project with ID {project_id} not found.")
 
-        if "name" in data: project.name = data["name"]
-        if "description" in data: project.description = data["description"]
-        if "notes" in data: project.notes = data["notes"]
-        if "status" in data: project.status = ProjectStatus(data["status"])
+        # Track changes for notification
+        changes = {}
+        old_collaborators = set(project.collaborators)
+        
+        # Update simple fields
+        if "name" in data and data["name"] != project.name:
+            changes["Name"] = (project.name, data["name"])
+            project.name = data["name"]
+            
+        if "description" in data and data["description"] != project.description:
+            changes["Description"] = (project.description, data["description"])
+            project.description = data["description"]
+            
+        if "notes" in data and data["notes"] != project.notes:
+            changes["Notes"] = (project.notes, data["notes"])
+            project.notes = data["notes"]
+            
+        if "status" in data and data["status"] != project.status.value:
+            changes["Status"] = (project.status.value, data["status"])
+            project.status = ProjectStatus(data["status"])
+            
         if "deadline" in data and data["deadline"]:
-            project.deadline = datetime.fromisoformat(data["deadline"].replace("Z", "+00:00")).date()
+            new_deadline = datetime.fromisoformat(data["deadline"].replace("Z", "+00:00")).date()
+            if project.deadline != new_deadline:
+                changes["Deadline"] = (
+                    project.deadline.strftime('%Y-%m-%d') if project.deadline else 'Not set',
+                    new_deadline.strftime('%Y-%m-%d')
+                )
+                project.deadline = new_deadline
 
+        # Update owner
+        new_owner = None
         if "owner" in data:
             owner = User.query.filter_by(email=data["owner"]).first()
-            if owner: project.owner = owner
+            if owner and owner.id != project.owner_id:
+                changes["Owner"] = (project.owner.email, owner.email)
+                project.owner = owner
+                new_owner = owner
 
+        # Track new collaborators
+        new_collaborators = []
         if collaborator_emails is not None:
+            current_emails = {user.email for user in project.collaborators}
+            new_emails = set(collaborator_emails)
+            
+            # Find added collaborators
+            added_emails = new_emails - current_emails
+            for email in added_emails:
+                user = User.query.filter_by(email=email).first()
+                if user:
+                    new_collaborators.append(user)
+            
+            # Update collaborators
             project.collaborators.clear()
             for email in collaborator_emails:
                 user = User.query.filter_by(email=email).first()
                 if user:
                     project.collaborators.append(user)
 
+        # Update attachments
         if "existing_attachments" in data:
             existing_attachments = json.loads(data["existing_attachments"])
             existing_ids = [att.get("id") for att in existing_attachments]
@@ -121,6 +178,22 @@ def update_project(project_id, data, new_files, collaborator_emails=None):
                 db.session.add(attachment)
 
         db.session.commit()
+        
+        # Get current user for email notification
+        from flask_jwt_extended import get_jwt_identity
+        current_user_id = get_jwt_identity()
+        current_user = User.query.get(int(current_user_id))
+        
+        # Send email notifications
+        if current_user:
+            # Send general project update notification if there were changes
+            if changes:
+                send_project_update_email_notification(project, current_user, changes)
+            
+            # Send specific notification for new collaborators
+            if new_collaborators:
+                send_project_collaborator_added_email_notification(project, current_user, new_collaborators)
+        
         return project
     
     except Exception as e:

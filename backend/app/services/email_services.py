@@ -274,3 +274,164 @@ def send_task_creation_email_notification(task, created_by):
     )
     
     print(f"DEBUG: Email sent successfully: {success}")
+
+def send_project_creation_email_notification(project, created_by):
+    """Send email when a project is created"""
+    recipients = get_project_notification_recipients(project, created_by.id)
+    
+    print(f"DEBUG: Project creation - Project: {project.name}")
+    print(f"DEBUG: Created by: {created_by.email}")
+    print(f"DEBUG: Recipients: {recipients}")
+    
+    if not recipients:
+        print("DEBUG: No recipients found for project creation email")
+        return
+    
+    subject = f"📁 New project created: {project.name}"
+    
+    message = f"""
+    <strong>A new project has been created:</strong>
+    
+    <div class="project-info">
+        <p><strong>Project:</strong> {project.name}</p>
+        <p><strong>Description:</strong> {project.description or 'No description provided'}</p>
+        <p><strong>Deadline:</strong> {project.deadline.strftime('%Y-%m-%d') if project.deadline else 'Not set'}</p>
+        <p><strong>Status:</strong> {project.status.value}</p>
+        <p><strong>Created by:</strong> {created_by.email}</p>
+        <p><strong>Owner:</strong> {project.owner.email}</p>
+    </div>
+    
+    <strong>Team Members:</strong>
+    <ul>
+        <li>{project.owner.email} (Owner)</li>
+        {"".join([f"<li>{collab.email} (Collaborator)</li>" for collab in project.collaborators])}
+    </ul>
+    
+    <em>This project has been added to your schedule.</em>
+    """
+    
+    success = email_service.send_notification_email(
+        recipients,
+        subject,
+        message,
+        project.name,
+        project.id,
+        "project_creation"
+    )
+    
+    print(f"DEBUG: Project creation email sent successfully: {success}")
+
+def send_project_update_email_notification(project, updated_by, updated_fields):
+    """Send email when a project is updated"""
+    recipients = get_project_notification_recipients(project, updated_by.id)
+    
+    print(f"DEBUG: Project update - Project: {project.name}")
+    print(f"DEBUG: Updated by: {updated_by.email}")
+    print(f"DEBUG: Updated fields: {updated_fields}")
+    
+    if not recipients:
+        print("DEBUG: No recipients found for project update email")
+        return
+    
+    # Format changes
+    changes_html = ""
+    if updated_fields:
+        for field, (old_value, new_value) in updated_fields.items():
+            changes_html += f"""
+            <div class="field-change">
+            <strong>{field}:</strong><br>
+            📍 From: {old_value}<br>
+            📍 To: {new_value}
+            </div>
+            """
+    
+    subject = f"✏️ Project updated: {project.name}"
+    
+    message = f"""
+    <strong>Project '{project.name}' has been updated by {updated_by.email}:</strong>
+    
+    {changes_html if changes_html else "<p>Project details have been modified.</p>"}
+    
+    <strong>Current Project Details:</strong>
+    <div class="project-info">
+        <p><strong>Project:</strong> {project.name}</p>
+        <p><strong>Description:</strong> {project.description or 'No description provided'}</p>
+        <p><strong>Deadline:</strong> {project.deadline.strftime('%Y-%m-%d') if project.deadline else 'Not set'}</p>
+        <p><strong>Status:</strong> {project.status.value}</p>
+        <p><strong>Owner:</strong> {project.owner.email}</p>
+    </div>
+    
+    <strong>Team Members:</strong>
+    <ul>
+        <li>{project.owner.email} (Owner)</li>
+        {"".join([f"<li>{collab.email} (Collaborator)</li>" for collab in project.collaborators])}
+    </ul>
+    """
+    
+    success = email_service.send_notification_email(
+        recipients,
+        subject,
+        message,
+        project.name,
+        project.id,
+        "project_update"
+    )
+    
+    print(f"DEBUG: Project update email sent successfully: {success}")
+
+def send_project_collaborator_added_email_notification(project, added_by, new_collaborators):
+    """Send email when collaborators are added to a project"""
+    if not new_collaborators:
+        return
+    
+    for collaborator in new_collaborators:
+        # Don't send email to the person who added them
+        if collaborator.id == added_by.id:
+            continue
+            
+        print(f"DEBUG: Adding collaborator {collaborator.email} to project {project.name}")
+        
+        subject = f"👥 You've been added to project: {project.name}"
+        
+        message = f"""
+        <strong>You have been added as a collaborator to a project:</strong>
+        
+        <div class="project-info">
+            <p><strong>Project:</strong> {project.name}</p>
+            <p><strong>Description:</strong> {project.description or 'No description provided'}</p>
+            <p><strong>Deadline:</strong> {project.deadline.strftime('%Y-%m-%d') if project.deadline else 'Not set'}</p>
+            <p><strong>Status:</strong> {project.status.value}</p>
+            <p><strong>Owner:</strong> {project.owner.email}</p>
+            <p><strong>Added by:</strong> {added_by.email}</p>
+        </div>
+        
+        <strong>Your Role:</strong> Collaborator
+        
+        <em>You can now view and contribute to this project.</em>
+        """
+        
+        success = email_service.send_notification_email(
+            [collaborator.email],
+            subject,
+            message,
+            project.name,
+            project.id,
+            "project_collaborator_added"
+        )
+        
+        print(f"DEBUG: Project collaborator email sent to {collaborator.email}: {success}")
+
+def get_project_notification_recipients(project, excluded_user_id):
+    """Get email recipients for project notifications, excluding the user who triggered the event"""
+    recipients = set()
+    
+    # Add project owner if not excluded
+    if project.owner_id != excluded_user_id:
+        recipients.add(project.owner.email)
+    
+    # Add collaborators if not excluded
+    for collaborator in project.collaborators:
+        if collaborator.id != excluded_user_id:
+            recipients.add(collaborator.email)
+    
+    return list(recipients)
