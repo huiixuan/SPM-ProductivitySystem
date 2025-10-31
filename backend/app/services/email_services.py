@@ -1,0 +1,276 @@
+﻿import os
+import requests
+import json
+from datetime import datetime
+from flask import current_app
+from app.models import db, User, Task
+
+class EmailService:
+    def __init__(self):
+        self.power_automate_webhook_url = os.getenv('POWER_AUTOMATE_WEBHOOK_URL')
+        self.enabled = bool(self.power_automate_webhook_url)
+        self.last_sent = {}
+        self.cooldown = 300  # 5 minutes between emails for same task
+    
+    def can_send_email(self, task_id, recipient):
+        key = f"{task_id}_{recipient}"
+        now = datetime.now().timestamp()
+        if key in self.last_sent and now - self.last_sent[key] < self.cooldown:
+            return False
+        self.last_sent[key] = now
+        return True
+    
+    def send_notification_email(self, recipient_emails, subject, message, task_title, task_id, notification_type):
+        """Send email notification via Power Automate webhook"""
+        if not self.enabled or not recipient_emails:
+            print(f"DEBUG: Email service disabled or no recipients. Enabled: {self.enabled}, Recipients: {recipient_emails}")
+            return False
+        
+        # Filter recipients to avoid spamming the same person
+        filtered_recipients = []
+        for recipient in (recipient_emails if isinstance(recipient_emails, list) else [recipient_emails]):
+            if self.can_send_email(task_id, recipient):
+                filtered_recipients.append(recipient)
+        
+        if not filtered_recipients:
+            print("DEBUG: All recipients are in cooldown period")
+            return False
+        
+        try:
+            payload = {
+                "recipients": filtered_recipients,
+                "subject": subject,
+                "message": message,
+                "task_title": task_title,
+                "task_id": task_id,
+                "notification_type": notification_type,
+                "app_url": f"http://localhost:5173/tasks/{task_id}"
+            }
+            
+            print(f"DEBUG: Sending email to {filtered_recipients}")
+            print(f"DEBUG: Subject: {subject}")
+            
+            response = requests.post(
+                self.power_automate_webhook_url,
+                json=payload,
+                headers={'Content-Type': 'application/json'},
+                timeout=10
+            )
+            
+            success = response.status_code in [200, 202]
+            print(f"DEBUG: Email sent successfully: {success}, Status: {response.status_code}")
+            return success
+            
+        except Exception as e:
+            print(f"DEBUG: Email notification failed: {e}")
+            return False
+
+# Global instance
+email_service = EmailService()
+
+def get_notification_recipients(task, excluded_user_id):
+    """Get email recipients for notifications, excluding the user who triggered the event"""
+    recipients = set()
+    
+    # Add task owner if not excluded
+    if task.owner_id != excluded_user_id:
+        recipients.add(task.owner.email)
+    
+    # Add collaborators if not excluded
+    for collaborator in task.collaborators:
+        if collaborator.id != excluded_user_id:
+            recipients.add(collaborator.email)
+    
+    print(f"DEBUG: Notification recipients for task {task.id}: {list(recipients)}")
+    return list(recipients)
+
+def send_comment_email_notification(comment, task, excluded_user_id):
+    """Send email for new comments"""
+    recipients = get_notification_recipients(task, excluded_user_id)
+    if not recipients:
+        return
+    
+    subject = f"💬 New comment on task: {task.title}"
+    
+    message = f"""
+    <strong>New comment by {comment.user.email}:</strong>
+    <div style="background: #f8f9fa; padding: 15px; border-radius: 5px; border-left: 4px solid #2563eb; margin: 10px 0;">
+    {comment.content}
+    </div>
+    
+    <strong>Task Details:</strong><br>
+    • Task: {task.title}<br>
+    • Project: {task.project.name if task.project else 'No Project'}<br>
+    • Commented: {comment.created_at.strftime('%Y-%m-%d %H:%M')}
+    """
+    
+    email_service.send_notification_email(
+        recipients,
+        subject,
+        message,
+        task.title,
+        task.id,
+        "new_comment"
+    )
+
+def send_task_update_email_notification(task, updated_by, updated_fields, excluded_user_id):
+    """Send email for task updates"""
+    recipients = get_notification_recipients(task, excluded_user_id)
+    if not recipients:
+        return
+    
+    # Format changes better
+    changes_html = ""
+    for change in updated_fields:
+        changes_html += f"""
+        <div style="background: #f0f9ff; padding: 10px; margin: 5px 0; border-radius: 4px; border-left: 3px solid #0ea5e9;">
+        <strong>{change['field']}:</strong><br>
+        📍 From: {change['old_value']}<br>
+        📍 To: {change['new_value']}
+        </div>
+        """
+    
+    subject = f"✏️ Task updated: {task.title}"
+    message = f"""
+    <strong>Task '{task.title}' has been updated by {updated_by.email}:</strong>
+    
+    {changes_html}
+    
+    <strong>Additional Info:</strong><br>
+    • Project: {task.project.name if task.project else 'No Project'}<br>
+    • Updated: {datetime.now().strftime('%Y-%m-%d %H:%M')}
+    """
+    
+    email_service.send_notification_email(
+        recipients,
+        subject,
+        message,
+        task.title,
+        task.id,
+        "task_updated"
+    )
+
+def send_due_date_reminder_email(task, days_until_due):
+    """Send due date reminder emails"""
+    recipients = get_notification_recipients(task, None)
+    if not recipients:
+        return
+    
+    status = "overdue" if days_until_due < 0 else "due soon"
+    days_text = f"{-days_until_due} days ago" if days_until_due < 0 else f"in {days_until_due} days"
+    icon = "⚠️" if days_until_due < 0 else "📅"
+    
+    subject = f"{icon} Task {status}: {task.title}"
+    message = f"""
+    <strong>{icon} Task '{task.title}' is {status} ({days_text})</strong>
+    
+    <strong>Task Details:</strong><br>
+    • Due Date: {task.duedate.strftime('%Y-%m-%d')}<br>
+    • Project: {task.project.name if task.project else 'No Project'}<br>
+    • Current Status: {task.status.value}<br>
+    • Priority: {task.priority}
+    
+    <em>Please take appropriate action to complete this task.</em>
+    """
+    
+    email_service.send_notification_email(
+        recipients,
+        subject,
+        message,
+        task.title,
+        task.id,
+        "due_date_reminder"
+    )
+
+def send_task_assignment_email_notification(task, assigned_by, assignee):
+    """Send email when a user is assigned to a task (as owner or collaborator)"""
+    
+    # Don't send email if the assignee is the same as the person assigning
+    if assigned_by.id == assignee.id:
+        return
+    
+    role = "owner" if task.owner_id == assignee.id else "collaborator"
+    
+    subject = f"📋 New task assignment: {task.title}"
+    
+    message = f"""
+    <strong>You have been assigned as {role} to a new task:</strong>
+    
+    <div style="background: #f8f9fa; padding: 15px; border-radius: 5px; border-left: 4px solid #2563eb; margin: 10px 0;">
+        <p><strong>Task:</strong> {task.title}</p>
+        <p><strong>Description:</strong> {task.description or 'No description provided'}</p>
+        <p><strong>Due Date:</strong> {task.duedate.strftime('%Y-%m-%d') if task.duedate else 'Not set'}</p>
+        <p><strong>Priority:</strong> {task.priority}</p>
+        <p><strong>Status:</strong> {task.status.value}</p>
+        <p><strong>Assigned by:</strong> {assigned_by.email}</p>
+        <p><strong>Project:</strong> {task.project.name if task.project else 'No Project'}</p>
+    </div>
+    
+    <strong>Collaborators:</strong>
+    <ul>
+        <li>{task.owner.email} (Owner)</li>
+        {"".join([f"<li>{collab.email}</li>" for collab in task.collaborators])}
+    </ul>
+    
+    <em>Please review the task and update your progress accordingly.</em>
+    """
+    
+    email_service.send_notification_email(
+        [assignee.email],
+        subject,
+        message,
+        task.title,
+        task.id,
+        "task_assignment"
+    )
+
+def send_task_creation_email_notification(task, created_by):
+    """Send email to all involved users when a task is created"""
+    recipients = get_notification_recipients(task, created_by.id)
+    
+    print(f"DEBUG: Task creation email - Task: {task.title}")
+    print(f"DEBUG: Created by: {created_by.email}")
+    print(f"DEBUG: Recipients: {recipients}")
+    print(f"DEBUG: Owner: {task.owner.email}")
+    print(f"DEBUG: Collaborators: {[c.email for c in task.collaborators]}")
+    
+    if not recipients:
+        print("DEBUG: No recipients found for email notification")
+        return
+    
+    subject = f"🆕 New task created: {task.title}"
+    
+    collaborator_list = "".join([f"<li>{collab.email} (Collaborator)</li>" for collab in task.collaborators])
+    
+    message = f"""
+    <strong>A new task has been created:</strong>
+    
+    <div style="background: #f8f9fa; padding: 15px; border-radius: 5px; border-left: 4px solid #2563eb; margin: 10px 0;">
+        <p><strong>Task:</strong> {task.title}</p>
+        <p><strong>Description:</strong> {task.description or 'No description provided'}</p>
+        <p><strong>Due Date:</strong> {task.duedate.strftime('%Y-%m-%d') if task.duedate else 'Not set'}</p>
+        <p><strong>Priority:</strong> {task.priority}</p>
+        <p><strong>Status:</strong> {task.status.value}</p>
+        <p><strong>Created by:</strong> {created_by.email}</p>
+        <p><strong>Project:</strong> {task.project.name if task.project else 'No Project'}</p>
+    </div>
+    
+    <strong>Team:</strong>
+    <ul>
+        <li>{task.owner.email} (Owner)</li>
+        {collaborator_list}
+    </ul>
+    
+    <em>This task has been added to your schedule.</em>
+    """
+    
+    success = email_service.send_notification_email(
+        recipients,
+        subject,
+        message,
+        task.title,
+        task.id,
+        "task_creation"
+    )
+    
+    print(f"DEBUG: Email sent successfully: {success}")

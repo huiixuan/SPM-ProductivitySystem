@@ -47,6 +47,8 @@ def create_app():
     db.init_app(app)
     migrate.init_app(app, db)
 
+    app.config['POWER_AUTOMATE_WEBHOOK_URL'] = os.getenv('POWER_AUTOMATE_WEBHOOK_URL')
+
     # Register blueprints
     app.register_blueprint(auth_bp, url_prefix="/auth")
     app.register_blueprint(user_bp, url_prefix="/api/user")

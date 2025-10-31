@@ -1,6 +1,15 @@
 from datetime import date, datetime, timedelta
 from app.models import db, Notification, Task, TaskStatus, User, NotificationType
 from sqlalchemy.orm.attributes import get_history
+from app.services.email_services import (
+    email_service,
+    get_notification_recipients,
+    send_comment_email_notification,
+    send_task_update_email_notification,
+    send_due_date_reminder_email,
+    send_task_assignment_email_notification,
+    send_task_creation_email_notification
+)
 
 TRIGGER_DAYS = [7, 3, 1]
 
@@ -58,6 +67,9 @@ def create_notifications_for_task(task: Task):
     
     db.session.commit()
 
+    if remaining_days <= 3:  # Only send emails for tasks due in 3 days or less/overdue
+        send_due_date_reminder_email(task, remaining_days)
+
 def create_comment_notification(comment):
     task = comment.task
     if not task:
@@ -86,6 +98,8 @@ def create_comment_notification(comment):
         db.session.add(notif)
     
     db.session.commit()
+    send_comment_email_notification(comment, task, comment.user_id)
+
 
 def create_task_update_notification(task: Task, updated_by: User, updated_fields: list):
     users_to_notify = {task.owner} | set(task.collaborators or [])
@@ -108,6 +122,7 @@ def create_task_update_notification(task: Task, updated_by: User, updated_fields
         db.session.add(notif)
     
     db.session.commit()
+    send_task_update_email_notification(task, updated_by, updated_fields, updated_by.id)
 
 def create_task_assignment_notification(task: Task, assigned_by: User, assignee: User):
     """Create notification when task is assigned to someone"""
@@ -131,6 +146,86 @@ def create_task_assignment_notification(task: Task, assigned_by: User, assignee:
     
     db.session.commit()
 
+def send_task_assignment_email_notification(task, assigned_by, assignee):
+    """Send email when a user is assigned to a task (as owner or collaborator)"""
+    
+    # Don't send email if the assignee is the same as the person assigning
+    if assigned_by.id == assignee.id:
+        return
+    
+    role = "owner" if task.owner_id == assignee.id else "collaborator"
+    
+    subject = f"📋 New task assignment: {task.title}"
+    
+    message = f"""
+    <strong>You have been assigned as {role} to a new task:</strong>
+    
+    <div class="task-info">
+        <p><strong>Task:</strong> {task.title}</p>
+        <p><strong>Description:</strong> {task.description or 'No description provided'}</p>
+        <p><strong>Due Date:</strong> {task.duedate.strftime('%Y-%m-%d') if task.duedate else 'Not set'}</p>
+        <p><strong>Priority:</strong> {task.priority}</p>
+        <p><strong>Status:</strong> {task.status.value}</p>
+        <p><strong>Assigned by:</strong> {assigned_by.email}</p>
+        <p><strong>Project:</strong> {task.project.name if task.project else 'No Project'}</p>
+    </div>
+    
+    <strong>Collaborators:</strong>
+    <ul>
+        <li>{task.owner.email} (Owner)</li>
+        {"".join([f"<li>{collab.email}</li>" for collab in task.collaborators])}
+    </ul>
+    
+    <em>Please review the task and update your progress accordingly.</em>
+    """
+    
+    email_service.send_notification_email(
+        [assignee.email],
+        subject,
+        message,
+        task.title,
+        task.id,
+        "task_assignment"
+    )
+
+def send_task_creation_email_notification(task, created_by):
+    """Send email to all involved users when a task is created"""
+    recipients = get_notification_recipients(task, created_by.id)
+    if not recipients:
+        return
+    
+    subject = f"🆕 New task created: {task.title}"
+    
+    message = f"""
+    <strong>A new task has been created:</strong>
+    
+    <div class="task-info">
+        <p><strong>Task:</strong> {task.title}</p>
+        <p><strong>Description:</strong> {task.description or 'No description provided'}</p>
+        <p><strong>Due Date:</strong> {task.duedate.strftime('%Y-%m-%d') if task.duedate else 'Not set'}</p>
+        <p><strong>Priority:</strong> {task.priority}</p>
+        <p><strong>Status:</strong> {task.status.value}</p>
+        <p><strong>Created by:</strong> {created_by.email}</p>
+        <p><strong>Project:</strong> {task.project.name if task.project else 'No Project'}</p>
+    </div>
+    
+    <strong>Team:</strong>
+    <ul>
+        <li>{task.owner.email} (Owner)</li>
+        {"".join([f"<li>{collab.email} (Collaborator)</li>" for collab in task.collaborators])}
+    </ul>
+    
+    <em>This task has been added to your schedule.</em>
+    """
+    
+    email_service.send_notification_email(
+        recipients,
+        subject,
+        message,
+        task.title,
+        task.id,
+        "task_creation"
+    )
 
 def remove_notifications_for_task(task: Task):
     """Deletes all notifications for a given task."""

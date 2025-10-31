@@ -294,322 +294,348 @@ export default function SchedulePage() {
     }
 
     return (
-        <div className="container mx-auto p-6 space-y-6">
+        <div className="min-h-screen bg-gray-50">
+            <div className="container mx-auto p-4 lg:p-6 space-y-4 lg:space-y-6">
 
-            <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
+                {/* Header Section */}
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white p-4 rounded-lg shadow-sm">
+                    <div className="flex items-center gap-4">
+                        <Button variant="outline" onClick={handleBack} className="flex items-center gap-2 shrink-0">
+                            <ArrowLeft className="h-4 w-4" />
+                            <span className="hidden sm:inline">Back to Dashboard</span>
+                        </Button>
+                        <h1 className="text-2xl lg:text-3xl font-bold">Schedule & Timeline</h1>
+                    </div>
+
+                    <div className="flex items-center gap-2 flex-wrap">
+                        <Button
+                            variant={displayMode === 'list' ? 'default' : 'outline'}
+                            onClick={() => setDisplayMode('list')}
+                            className="flex items-center gap-2 text-xs lg:text-sm"
+                            size="sm"
+                        >
+                            <List className="h-4 w-4" /> List
+                        </Button>
+                        <Button
+                            variant={displayMode === 'calendar' ? 'default' : 'outline'}
+                            onClick={() => setDisplayMode('calendar')}
+                            className="flex items-center gap-2 text-xs lg:text-sm"
+                            size="sm"
+                        >
+                            <CalendarIcon className="h-4 w-4" /> Calendar
+                        </Button>
+                    </div>
+                </div>
+
+                {/* User Info Card */}
+                {currentUser && (
+                    <Card className="shadow-sm">
+                        <CardContent className="p-4 lg:p-6">
+                            <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+                                <div>
+                                    <p className="font-semibold">Logged in as: {currentUser.email}</p>
+                                    <p className="text-sm text-muted-foreground">Role: {currentUser.role}</p>
+                                </div>
+                                <div className="flex items-center gap-2 lg:gap-4 flex-wrap">
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={fetchCalendarData}
+                                        disabled={refreshing}
+                                        className="flex items-center gap-2 text-xs lg:text-sm"
+                                    >
+                                        <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+                                        Refresh
+                                    </Button>
+                                    {overdueCount > 0 && <Badge variant="destructive" className="text-xs">{overdueCount} overdue</Badge>}
+                                    {ongoingCount > 0 && <Badge variant="default" className="text-xs">{ongoingCount} ongoing</Badge>}
+                                    {upcomingCount > 0 && <Badge variant="outline" className="text-xs">{upcomingCount} upcoming</Badge>}
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
+                )}
+
+                {/* Tabs */}
+                <div className="flex space-x-1 lg:space-x-4 border-b">
+                    <Button
+                        variant={activeTab === "personal" ? "default" : "ghost"}
+                        onClick={() => setActiveTab("personal")}
+                        className="flex items-center gap-2 text-xs lg:text-sm px-3 lg:px-4"
+                        size="sm"
+                    >
+                        <CalendarIcon className="h-4 w-4" /> My Schedule
+                    </Button>
+                    <Button
+                        variant={activeTab === "team" ? "default" : "ghost"}
+                        onClick={() => setActiveTab("team")}
+                        className="flex items-center gap-2 text-xs lg:text-sm px-3 lg:px-4"
+                        size="sm"
+                    >
+                        <Users className="h-4 w-4" /> Team Schedule
+                    </Button>
+                </div>
+
+                {/* Calendar View Controls */}
+                {displayMode === 'calendar' && (
+                    <Card className="shadow-sm">
+                        <CardContent className="p-4 lg:p-6">
+                            <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
+                                <div className="flex gap-2 flex-wrap">
+                                    <Button
+                                        variant={calendarView === 'day' ? 'default' : 'outline'}
+                                        size="sm"
+                                        onClick={() => setCalendarView('day')}
+                                        className="text-xs lg:text-sm"
+                                    >
+                                        Day
+                                    </Button>
+                                    <Button
+                                        variant={calendarView === 'week' ? 'default' : 'outline'}
+                                        size="sm"
+                                        onClick={() => setCalendarView('week')}
+                                        className="text-xs lg:text-sm"
+                                    >
+                                        Week
+                                    </Button>
+                                    <Button
+                                        variant={calendarView === 'month' ? 'default' : 'outline'}
+                                        size="sm"
+                                        onClick={() => setCalendarView('month')}
+                                        className="text-xs lg:text-sm"
+                                    >
+                                        Month
+                                    </Button>
+                                </div>
+                                <div className="text-xs lg:text-sm text-muted-foreground">
+                                    {refreshing ? 'Refreshing...' : 'Auto-refreshes every 30 seconds'}
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
+                )}
+
+                {/* Team Overview */}
+                {activeTab === 'team' && (
+                    <Card className="shadow-sm">
+                        <CardHeader className="p-4 lg:p-6">
+                            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                                <CardTitle className="text-lg lg:text-xl">Team Overview</CardTitle>
+                                <div className="flex flex-col lg:flex-row lg:items-center gap-4">
+                                    <div className="text-xs lg:text-sm text-muted-foreground">
+                                        Showing {filteredTeamEvents.length} events for{' '}
+                                        {selectedMember === 'all' ? 'all team members' : selectedMember}
+                                    </div>
+                                    <Select value={selectedMember} onValueChange={setSelectedMember}>
+                                        <SelectTrigger className="w-full lg:w-64 text-xs lg:text-sm">
+                                            <SelectValue placeholder="Filter by team member" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="all">All Team Members</SelectItem>
+                                            {teamMembers.map(member => {
+                                                const workloadDisplay = getWorkloadDisplay(member);
+                                                return (
+                                                    <SelectItem key={member.id} value={member.email} className="text-xs lg:text-sm">
+                                                        {member.name} - {workloadDisplay.total} items
+                                                    </SelectItem>
+                                                );
+                                            })}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                            </div>
+                        </CardHeader>
+                        <CardContent className="p-4 lg:p-6 pt-0">
+                            <div className="mb-6">
+                                <h3 className="font-semibold mb-3 text-sm lg:text-base">Workload Distribution</h3>
+                                {teamMembers.length > 0 ? (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-3 lg:gap-4">
+                                        {teamMembers.map(member => {
+                                            const workloadLevel = getWorkloadLevel(member.workload);
+                                            const workloadDisplay = getWorkloadDisplay(member);
+                                            const isSelected = selectedMember === member.email;
+
+                                            return (
+                                                <div
+                                                    key={member.id}
+                                                    className={`border rounded-lg p-3 lg:p-4 cursor-pointer transition-all ${isSelected ? 'ring-2 ring-blue-500 bg-blue-50' : 'hover:bg-gray-50'
+                                                        }`}
+                                                    onClick={() => setSelectedMember(isSelected ? 'all' : member.email)}
+                                                >
+                                                    <div className="flex justify-between items-center mb-2">
+                                                        <span className={`font-medium text-sm lg:text-base ${isSelected ? 'text-blue-700' : ''
+                                                            }`}>
+                                                            {member.name}
+                                                        </span>
+                                                        <Badge variant={getWorkloadVariant(workloadLevel)} className="text-xs">
+                                                            {workloadDisplay.total} items
+                                                        </Badge>
+                                                    </div>
+                                                    <p className="text-xs lg:text-sm text-muted-foreground">{member.email}</p>
+                                                    <p className="text-xs text-muted-foreground capitalize">{member.role}</p>
+
+                                                    <div className="mt-2 text-xs text-muted-foreground">
+                                                        {workloadDisplay.breakdown}
+                                                    </div>
+
+                                                    <div className="mt-2 w-full bg-gray-200 rounded-full h-2">
+                                                        <div
+                                                            className={`h-2 rounded-full ${workloadLevel === 'high' ? 'bg-red-500' :
+                                                                    workloadLevel === 'medium' ? 'bg-yellow-500' : 'bg-green-500'
+                                                                }`}
+                                                            style={{
+                                                                width: `${Math.min(member.workload * 10, 100)}%`
+                                                            }}
+                                                        ></div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                ) : (
+                                    <div className="text-center text-muted-foreground py-4 text-sm">
+                                        No team members found
+                                    </div>
+                                )}
+                            </div>
+                        </CardContent>
+                    </Card>
+                )}
+
+                {/* Main Content Area - Full Width */}
+                <div className="w-full">
+                    {displayMode === 'calendar' ? (
+                        <>
+                            {calendarView === 'month' && (
+                                <MonthlyCalendarView
+                                    events={currentEvents}
+                                    currentDate={currentDate}
+                                    onNavigate={handleNavigate}
+                                    onSelectEvent={handleEventSelect}
+                                    onGoToToday={handleGoToToday}
+                                />
+                            )}
+                            {calendarView === 'week' && (
+                                <WeeklyCalendarView
+                                    events={currentEvents}
+                                    currentDate={currentDate}
+                                    onNavigate={handleNavigate}
+                                    onSelectEvent={handleEventSelect}
+                                    onGoToToday={handleGoToToday}
+                                />
+                            )}
+                            {calendarView === 'day' && (
+                                <DailyCalendarView
+                                    events={currentEvents}
+                                    currentDate={currentDate}
+                                    onNavigate={handleNavigate}
+                                    onSelectEvent={handleEventSelect}
+                                    onGoToToday={handleGoToToday}
+                                />
+                            )}
+                        </>
+                    ) : (
+                        <Card className="shadow-sm w-full">
+                            <CardHeader className="p-4 lg:p-6">
+                                <CardTitle className="text-lg lg:text-xl">
+                                    {activeTab === 'personal' ? 'My Deadlines' : 'Team Deadlines'}
+                                    <span className="text-xs lg:text-sm font-normal text-muted-foreground ml-2">
+                                        • {currentEvents.length} items
+                                        {activeTab === 'team' && selectedMember !== 'all' && (
+                                            <> for {selectedMember}</>
+                                        )}
+                                    </span>
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent className="p-4 lg:p-6 pt-0">
+                                <div className="space-y-3 max-h-[60vh] overflow-y-auto">
+                                    {currentEvents.map((event) => (
+                                        <div
+                                            key={`${event.type}-${event.id}`}
+                                            className={`flex items-center justify-between p-3 lg:p-4 border rounded-lg transition-all duration-200 ${event.status === 'overdue'
+                                                    ? 'bg-red-50 border-red-300 shadow-sm hover:bg-red-100'
+                                                    : 'hover:bg-gray-50'
+                                                }`}
+                                            onClick={() => handleEventSelect(event)}
+                                        >
+                                            <div className="flex-1 min-w-0">
+                                                <div className="flex items-center gap-2 mb-2 flex-wrap">
+                                                    <h4 className={`font-medium text-sm lg:text-base truncate ${event.status === 'overdue' ? 'text-red-800' : ''
+                                                        }`}>
+                                                        {event.type === 'task' ? '📝' : '📁'} {event.title}
+                                                    </h4>
+                                                    <div className="flex gap-1 flex-wrap">
+                                                        <Badge
+                                                            variant={getStatusColor(event.status)}
+                                                            className={`text-xs ${event.status === 'overdue' ? 'animate-pulse' : ''
+                                                                }`}
+                                                        >
+                                                            {event.status === 'overdue' ? '⚠️ ' : ''}{event.status}
+                                                        </Badge>
+                                                        <Badge variant="outline" className="text-xs">{event.type}</Badge>
+                                                    </div>
+                                                </div>
+                                                <p className={`text-xs lg:text-sm ${event.status === 'overdue' ? 'text-red-600 font-medium' : 'text-muted-foreground'
+                                                    }`}>
+                                                    Due: {event.start.toLocaleDateString('en-US', {
+                                                        weekday: 'long',
+                                                        year: 'numeric',
+                                                        month: 'long',
+                                                        day: 'numeric'
+                                                    })}
+                                                </p>
+                                                {event.description && (
+                                                    <p className="text-xs lg:text-sm mt-1 text-muted-foreground line-clamp-2">
+                                                        {event.description}
+                                                    </p>
+                                                )}
+                                                {event.assigneeEmail && activeTab === 'team' && (
+                                                    <p className="text-xs lg:text-sm mt-1 text-muted-foreground">
+                                                        Assigned to: {event.assigneeEmail}
+                                                        {event.collaborators && event.collaborators.length > 0 && (
+                                                            <span> (with {event.collaborators.length} collaborator{event.collaborators.length !== 1 ? 's' : ''})</span>
+                                                        )}
+                                                    </p>
+                                                )}
+
+                                                {event.status === 'overdue' && (
+                                                    <div className="flex items-center gap-1 mt-2 text-red-600 text-xs">
+                                                        <span>⚠️ This item is overdue</span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    ))}
+                                    {currentEvents.length === 0 && (
+                                        <div className="text-center text-muted-foreground py-8 text-sm lg:text-base">
+                                            {activeTab === 'personal' ? (
+                                                'No deadlines found. Create tasks or projects to see them here.'
+                                            ) : selectedMember === 'all' ? (
+                                                'No team deadlines found. Team deadlines will appear when projects have collaborators.'
+                                            ) : (
+                                                `No deadlines found for ${selectedMember}. This user might not have any assigned tasks or projects with due dates.`
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                            </CardContent>
+                        </Card>
+                    )}
+                </div>
+
+                <EventDetailsModal
+                    event={selectedEvent}
+                    isOpen={isEventModalOpen}
+                    onClose={() => setIsEventModalOpen(false)}
+                />
+
+                {/* Back Button at Bottom */}
+                <div className="flex justify-center pt-4">
                     <Button variant="outline" onClick={handleBack} className="flex items-center gap-2">
                         <ArrowLeft className="h-4 w-4" />
                         Back to Dashboard
                     </Button>
-                    <h1 className="text-3xl font-bold">Schedule & Timeline</h1>
                 </div>
-
-                <div className="flex items-center gap-2">
-                    <Button
-                        variant={displayMode === 'list' ? 'default' : 'outline'}
-                        onClick={() => setDisplayMode('list')}
-                        className="flex items-center gap-2"
-                    >
-                        <List className="h-4 w-4" /> List
-                    </Button>
-                    <Button
-                        variant={displayMode === 'calendar' ? 'default' : 'outline'}
-                        onClick={() => setDisplayMode('calendar')}
-                        className="flex items-center gap-2"
-                    >
-                        <CalendarIcon className="h-4 w-4" /> Calendar
-                    </Button>
-                </div>
-            </div>
-
-            {currentUser && (
-                <Card>
-                    <CardContent className="pt-6">
-                        <div className="flex justify-between items-center">
-                            <div>
-                                <p className="font-semibold">Logged in as: {currentUser.email}</p>
-                                <p className="text-sm text-muted-foreground">Role: {currentUser.role}</p>
-                            </div>
-                            <div className="flex items-center gap-4">
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={fetchCalendarData}
-                                    disabled={refreshing}
-                                    className="flex items-center gap-2"
-                                >
-                                    <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
-                                    Refresh
-                                </Button>
-                                {overdueCount > 0 && <Badge variant="destructive">{overdueCount} overdue</Badge>}
-                                {ongoingCount > 0 && <Badge variant="default">{ongoingCount} ongoing</Badge>}
-                                {upcomingCount > 0 && <Badge variant="outline">{upcomingCount} upcoming</Badge>}
-                            </div>
-                        </div>
-                    </CardContent>
-                </Card>
-            )}
-
-            {/* Tabs */}
-            <div className="flex space-x-4 border-b">
-                <Button
-                    variant={activeTab === "personal" ? "default" : "ghost"}
-                    onClick={() => setActiveTab("personal")}
-                >
-                    <CalendarIcon className="h-4 w-4 mr-2" /> My Schedule
-                </Button>
-                <Button
-                    variant={activeTab === "team" ? "default" : "ghost"}
-                    onClick={() => setActiveTab("team")}
-                >
-                    <Users className="h-4 w-4 mr-2" /> Team Schedule
-                </Button>
-            </div>
-
-            {displayMode === 'calendar' && (
-                <Card>
-                    <CardContent className="pt-6">
-                        <div className="flex items-center justify-between">
-                            <div className="flex gap-2">
-                                <Button
-                                    variant={calendarView === 'day' ? 'default' : 'outline'}
-                                    size="sm"
-                                    onClick={() => setCalendarView('day')}
-                                >
-                                    Day
-                                </Button>
-                                <Button
-                                    variant={calendarView === 'week' ? 'default' : 'outline'}
-                                    size="sm"
-                                    onClick={() => setCalendarView('week')}
-                                >
-                                    Week
-                                </Button>
-                                <Button
-                                    variant={calendarView === 'month' ? 'default' : 'outline'}
-                                    size="sm"
-                                    onClick={() => setCalendarView('month')}
-                                >
-                                    Month
-                                </Button>
-                            </div>
-                            <div className="text-sm text-muted-foreground">
-                                {refreshing ? 'Refreshing...' : 'Auto-refreshes every 30 seconds'}
-                            </div>
-                        </div>
-                    </CardContent>
-                </Card>
-            )}
-
-            {activeTab === 'team' && (
-                <Card>
-                    <CardHeader>
-                        <div className="flex items-center justify-between">
-                            <CardTitle>Team Overview</CardTitle>
-                            <div className="flex items-center gap-4">
-                                <div className="text-sm text-muted-foreground">
-                                    Showing {filteredTeamEvents.length} events for{' '}
-                                    {selectedMember === 'all' ? 'all team members' : selectedMember}
-                                </div>
-                                <Select value={selectedMember} onValueChange={setSelectedMember}>
-                                    <SelectTrigger className="w-64">
-                                        <SelectValue placeholder="Filter by team member" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="all">All Team Members</SelectItem>
-                                        {teamMembers.map(member => {
-                                            const workloadDisplay = getWorkloadDisplay(member);
-                                            return (
-                                                <SelectItem key={member.id} value={member.email}>
-                                                    {member.name} - {workloadDisplay.total} items
-                                                </SelectItem>
-                                            );
-                                        })}
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                        </div>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="mb-6">
-                            <h3 className="font-semibold mb-3">Workload Distribution</h3>
-                            {teamMembers.length > 0 ? (
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                    {teamMembers.map(member => {
-                                        const workloadLevel = getWorkloadLevel(member.workload);
-                                        const workloadDisplay = getWorkloadDisplay(member);
-                                        const isSelected = selectedMember === member.email;
-
-                                        return (
-                                            <div
-                                                key={member.id}
-                                                className={`border rounded-lg p-4 cursor-pointer transition-all ${isSelected ? 'ring-2 ring-blue-500 bg-blue-50' : 'hover:bg-gray-50'
-                                                    }`}
-                                                onClick={() => setSelectedMember(isSelected ? 'all' : member.email)}
-                                            >
-                                                <div className="flex justify-between items-center mb-2">
-                                                    <span className={`font-medium ${isSelected ? 'text-blue-700' : ''}`}>
-                                                        {member.name}
-                                                    </span>
-                                                    <Badge variant={getWorkloadVariant(workloadLevel)}>
-                                                        {workloadDisplay.total} items
-                                                    </Badge>
-                                                </div>
-                                                <p className="text-sm text-muted-foreground">{member.email}</p>
-                                                <p className="text-xs text-muted-foreground capitalize">{member.role}</p>
-
-                                                <div className="mt-2 text-xs text-muted-foreground">
-                                                    {workloadDisplay.breakdown}
-                                                </div>
-
-                                                <div className="mt-2 w-full bg-gray-200 rounded-full h-2">
-                                                    <div
-                                                        className={`h-2 rounded-full ${workloadLevel === 'high' ? 'bg-red-500' :
-                                                                workloadLevel === 'medium' ? 'bg-yellow-500' : 'bg-green-500'
-                                                            }`}
-                                                        style={{
-                                                            width: `${Math.min(member.workload * 10, 100)}%`
-                                                        }}
-                                                    ></div>
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            ) : (
-                                <div className="text-center text-muted-foreground py-4">
-                                    No team members found
-                                </div>
-                            )}
-                        </div>
-                    </CardContent>
-                </Card>
-            )}
-
-            {displayMode === 'calendar' ? (
-                <>
-                    {calendarView === 'month' && (
-                        <MonthlyCalendarView
-                            events={currentEvents}
-                            currentDate={currentDate}
-                            onNavigate={handleNavigate}
-                            onSelectEvent={handleEventSelect}
-                            onGoToToday={handleGoToToday}
-                        />
-                    )}
-                    {calendarView === 'week' && (
-                        <WeeklyCalendarView
-                            events={currentEvents}
-                            currentDate={currentDate}
-                            onNavigate={handleNavigate}
-                            onSelectEvent={handleEventSelect}
-                            onGoToToday={handleGoToToday}
-                        />
-                    )}
-                    {calendarView === 'day' && (
-                        <DailyCalendarView
-                            events={currentEvents}
-                            currentDate={currentDate}
-                            onNavigate={handleNavigate}
-                            onSelectEvent={handleEventSelect}
-                            onGoToToday={handleGoToToday}
-                        />
-                    )}
-                </>
-            ) : (
-                <Card>
-                    <CardHeader>
-                        <CardTitle>
-                            {activeTab === 'personal' ? 'My Deadlines' : 'Team Deadlines'}
-                            <span className="text-sm font-normal text-muted-foreground ml-2">
-                                • {currentEvents.length} items
-                                {activeTab === 'team' && selectedMember !== 'all' && (
-                                    <> for {selectedMember}</>
-                                )}
-                            </span>
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="space-y-3">
-                            {currentEvents.map((event) => (
-                                <div
-                                    key={`${event.type}-${event.id}`}
-                                    className={`flex items-center justify-between p-4 border rounded-lg transition-all duration-200 ${event.status === 'overdue'
-                                            ? 'bg-red-50 border-red-300 shadow-sm hover:bg-red-100'
-                                            : 'hover:bg-gray-50'
-                                        }`}
-                                    onClick={() => handleEventSelect(event)}
-                                >
-                                    <div className="flex-1">
-                                        <div className="flex items-center gap-2 mb-2">
-                                            <h4 className={`font-medium ${event.status === 'overdue' ? 'text-red-800 text-lg' : ''
-                                                }`}>
-                                                {event.type === 'task' ? '📝' : '📁'} {event.title}
-                                            </h4>
-                                            <Badge variant={getStatusColor(event.status)} className={
-                                                event.status === 'overdue' ? 'animate-pulse' : ''
-                                            }>
-                                                {event.status === 'overdue' ? '⚠️ ' : ''}{event.status}
-                                            </Badge>
-                                            <Badge variant="outline">{event.type}</Badge>
-                                        </div>
-                                        <p className={`text-sm ${event.status === 'overdue' ? 'text-red-600 font-medium' : 'text-muted-foreground'
-                                            }`}>
-                                            Due: {event.start.toLocaleDateString('en-US', {
-                                                weekday: 'long',
-                                                year: 'numeric',
-                                                month: 'long',
-                                                day: 'numeric'
-                                            })}
-                                        </p>
-                                        {event.description && (
-                                            <p className="text-sm mt-1 text-muted-foreground">{event.description}</p>
-                                        )}
-                                        {event.assigneeEmail && activeTab === 'team' && (
-                                            <p className="text-sm mt-1 text-muted-foreground">
-                                                Assigned to: {event.assigneeEmail}
-                                                {event.collaborators && event.collaborators.length > 0 && (
-                                                    <span> (with {event.collaborators.length} collaborator{event.collaborators.length !== 1 ? 's' : ''})</span>
-                                                )}
-                                            </p>
-                                        )}
-
-                                        {event.status === 'overdue' && (
-                                            <div className="flex items-center gap-1 mt-2 text-red-600 text-sm">
-                                                <span>⚠️ This item is overdue</span>
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-                            ))}
-                            {currentEvents.length === 0 && (
-                                <div className="text-center text-muted-foreground py-8">
-                                    {activeTab === 'personal' ? (
-                                        'No deadlines found. Create tasks or projects to see them here.'
-                                    ) : selectedMember === 'all' ? (
-                                        'No team deadlines found. Team deadlines will appear when projects have collaborators.'
-                                    ) : (
-                                        `No deadlines found for ${selectedMember}. This user might not have any assigned tasks or projects with due dates.`
-                                    )}
-                                </div>
-                            )}
-                        </div>
-                    </CardContent>
-                </Card>
-            )}
-
-            <EventDetailsModal
-                event={selectedEvent}
-                isOpen={isEventModalOpen}
-                onClose={() => setIsEventModalOpen(false)}
-            />
-
-            <div className="flex justify-center">
-                <Button variant="outline" onClick={handleBack} className="flex items-center gap-2">
-                    <ArrowLeft className="h-4 w-4" />
-                    Back to Dashboard
-                </Button>
             </div>
         </div>
     );

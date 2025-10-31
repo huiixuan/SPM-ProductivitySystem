@@ -88,7 +88,7 @@ export default function WeeklyCalendarView({
     const weekRange = `${weekDates[0].toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${weekDates[6].toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
 
     return (
-        <Card>
+        <Card className="w-full">
             <CardHeader>
                 <div className="flex items-center justify-between">
                     <CardTitle>Weekly View - {weekRange}</CardTitle>
@@ -115,52 +115,54 @@ export default function WeeklyCalendarView({
                     </div>
                 </div>
             </CardHeader>
-            <CardContent>
-                <div className="grid grid-cols-7 gap-2">
-                    {weekDates.map((date, index) => {
-                        const dayEvents = getEventsForDay(date);
-                        const isToday = new Date().toDateString() === date.toDateString();
+            <CardContent className="w-full overflow-x-auto">
+                <div className="min-w-[800px] lg:min-w-full">
+                    <div className="grid grid-cols-7 gap-2 w-full">
+                        {weekDates.map((date, index) => {
+                            const dayEvents = getEventsForDay(date);
+                            const isToday = new Date().toDateString() === date.toDateString();
 
-                        return (
-                            <div key={index} className="min-h-32">
-                                <div className={`text-center font-medium p-2 border-b ${isToday ? 'bg-blue-50 text-blue-600' : ''}`}>
-                                    <div className="text-sm">{date.toLocaleDateString('en-US', { weekday: 'short' })}</div>
-                                    <div className={`text-lg ${isToday ? 'font-bold' : ''}`}>
-                                        {date.getDate()}
+                            return (
+                                <div key={index} className="min-h-32">
+                                    <div className={`text-center font-medium p-2 border-b ${isToday ? 'bg-blue-50 text-blue-600' : ''}`}>
+                                        <div className="text-sm">{date.toLocaleDateString('en-US', { weekday: 'short' })}</div>
+                                        <div className={`text-lg ${isToday ? 'font-bold' : ''}`}>
+                                            {date.getDate()}
+                                        </div>
+                                    </div>
+                                    <div className="p-1 space-y-1 max-h-48 overflow-y-auto">
+                                        {dayEvents.map(calEvent => (
+                                            <div
+                                                key={calEvent.id}
+                                                className={`text-xs p-1 rounded cursor-pointer hover:bg-gray-100 border-l-4 ${calEvent.status === 'overdue' ? 'bg-red-50 border-red-300' : ''
+                                                    }`}
+                                                style={{
+                                                    borderLeftColor: getStatusBorderColor(calEvent.status)
+                                                }}
+                                                onClick={() => onSelectEvent?.(calEvent)}
+                                                title={`${calEvent.title} - ${calEvent.status}`}
+                                            >
+                                                <div className={`font-medium truncate ${calEvent.status === 'overdue' ? 'text-red-800 font-bold' : ''
+                                                    }`}>
+                                                    {calEvent.type === 'task' ? '📝' : '📁'} {calEvent.title}
+                                                </div>
+                                                <Badge
+                                                    variant={getStatusColor(calEvent.status)}
+                                                    className={cn(
+                                                        getStatusClassName(calEvent.status),
+                                                        "mt-1 text-xs",
+                                                        calEvent.status === 'overdue' ? 'animate-pulse' : ''
+                                                    )}
+                                                >
+                                                    {calEvent.status === 'overdue' ? '⚠️ ' : ''}{calEvent.status}
+                                                </Badge>
+                                            </div>
+                                        ))}
                                     </div>
                                 </div>
-                                <div className="p-1 space-y-1 max-h-48 overflow-y-auto">
-                                    {dayEvents.map(calEvent => (
-                                        <div
-                                            key={calEvent.id}
-                                            className={`text-xs p-1 rounded cursor-pointer hover:bg-gray-100 border-l-4 ${calEvent.status === 'overdue' ? 'bg-red-50 border-red-300' : ''
-                                                }`}
-                                            style={{
-                                                borderLeftColor: getStatusBorderColor(calEvent.status)
-                                            }}
-                                            onClick={() => onSelectEvent?.(calEvent)}
-                                            title={`${calEvent.title} - ${calEvent.status}`}
-                                        >
-                                            <div className={`font-medium truncate ${calEvent.status === 'overdue' ? 'text-red-800 font-bold' : ''
-                                                }`}>
-                                                {calEvent.type === 'task' ? '📝' : '📁'} {calEvent.title}
-                                            </div>
-                                            <Badge
-                                                variant={getStatusColor(calEvent.status)}
-                                                className={cn(
-                                                    getStatusClassName(calEvent.status),
-                                                    "mt-1 text-xs",
-                                                    calEvent.status === 'overdue' ? 'animate-pulse' : ''
-                                                )}
-                                            >
-                                                {calEvent.status === 'overdue' ? '⚠️ ' : ''}{calEvent.status}
-                                            </Badge>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        );
-                    })}
+                            );
+                        })}
+                    </div>
                 </div>
             </CardContent>
         </Card>

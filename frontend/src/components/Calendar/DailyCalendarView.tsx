@@ -63,7 +63,7 @@ export default function DailyCalendarView({
     const dayEvents = getEventsForDay(currentDate);
 
     return (
-        <Card>
+        <Card className="w-full">
             <CardHeader>
                 <div className="flex items-center justify-between">
                     <CardTitle>
@@ -97,7 +97,7 @@ export default function DailyCalendarView({
                     </div>
                 </div>
             </CardHeader>
-            <CardContent>
+            <CardContent className="w-full">
                 <div className="space-y-4">
                     {dayEvents.length === 0 ? (
                         <div className="text-center text-muted-foreground py-8">

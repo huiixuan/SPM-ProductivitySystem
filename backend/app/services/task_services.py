@@ -14,6 +14,11 @@ from app.services.notification_services import (
     create_task_assignment_notification,
 )
 from flask_jwt_extended import get_jwt_identity
+from app.services.email_services import send_task_assignment_email_notification
+from app.services.email_services import (
+    send_task_creation_email_notification,
+    send_task_assignment_email_notification
+)
 
 class _NotificationFacade:
     def create_notifications_for_task(self, *args, **kwargs):
@@ -70,8 +75,31 @@ def create_task(title, description, duedate, status, owner_email, collaborator_e
         current_user_id = get_jwt_identity()
         current_user = User.query.get(int(current_user_id))
 
-        if current_user and current_user.id != owner.id:
-            notification_service.create_task_assignment_notification(task, current_user, owner)
+        # Send email notifications to all involved users
+        if current_user:
+            print(f"DEBUG: Current user: {current_user.email}")
+            print(f"DEBUG: Task owner: {owner.email}")
+            print(f"DEBUG: Collaborators: {[c.email for c in collaborators]}")
+            
+            # Send task creation notification to everyone except the creator
+            try:
+                send_task_creation_email_notification(task, current_user)
+            except Exception as e:
+                print(f"DEBUG: Error sending task creation email: {e}")
+            
+            # Also send individual assignment notifications
+            if current_user.id != owner.id:
+                try:
+                    send_task_assignment_email_notification(task, current_user, owner)
+                except Exception as e:
+                    print(f"DEBUG: Error sending owner assignment email: {e}")
+            
+            for collaborator in collaborators:
+                if collaborator.id != current_user.id:
+                    try:
+                        send_task_assignment_email_notification(task, current_user, collaborator)
+                    except Exception as e:
+                        print(f"DEBUG: Error sending collaborator assignment email to {collaborator.email}: {e}")
 
         return task
     
