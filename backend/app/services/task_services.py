@@ -189,7 +189,7 @@ def update_task(task_id, data, new_files):
         print(f"Starting update for task {task_id}")
         print(f"Received data: {data}")
         print(f"Received files: {new_files}")
-
+        
         task = Task.query.get(task_id)
         if not task:
             raise ValueError(f"Task with task ID {task_id} not found")
@@ -201,64 +201,134 @@ def update_task(task_id, data, new_files):
             'owner_id': task.owner_id
         }
         
-        task.title = data.get("title", task.title)
-        task.description = data.get("description", task.description)
-
-        if duedate := data.get("duedate"):
+        # Track changes for notifications
+        updated_fields = []
+        
+        # Update fields and track changes
+        if "title" in data and data["title"] != task.title:
+            task.title = data["title"]
+            updated_fields.append({
+                "field": "title",
+                "old_value": task.title,
+                "new_value": data["title"]
+            })
+        
+        if "description" in data and data["description"] != task.description:
+            task.description = data["description"]
+            updated_fields.append({
+                "field": "description", 
+                "old_value": task.description,
+                "new_value": data["description"]
+            })
+            
+        # Due date change - IMPORTANT: This triggers notifications
+        if "duedate" in data and data["duedate"]:
             try:
-                task.duedate = datetime.fromisoformat(duedate.replace('Z', '+00:00'))
+                new_duedate = datetime.fromisoformat(data["duedate"].replace('Z', '+00:00'))
+                if task.duedate != new_duedate:
+                    updated_fields.append({
+                        "field": "due date",
+                        "old_value": task.duedate.strftime('%Y-%m-%d') if task.duedate else "Not set",
+                        "new_value": new_duedate.strftime('%Y-%m-%d')
+                    })
+                    task.duedate = new_duedate
             except ValueError as e:
                 print(f"Date parsing error: {e}")
-                raise ValueError(f"Invalid date format: {duedate}")
-            
-        status_changed_to_completed = False
-
-        if status := data.get("status"):
+                raise ValueError(f"Invalid date format: {data['duedate']}")
+        
+        # Status change
+        if "status" in data and data["status"]:
             try:
-                task.status = TaskStatus(status)
+                new_status = TaskStatus(data["status"])
+                if task.status != new_status:
+                    updated_fields.append({
+                        "field": "status",
+                        "old_value": task.status.value,
+                        "new_value": new_status.value
+                    })
+                    task.status = new_status
             except ValueError:
-                raise ValueError(f"Invalid status: {status}")
-            else:
-                status_changed_to_completed = task.status == TaskStatus.COMPLETED
-            
-        task.priority = int(data.get("priority", task.priority))
-        task.notes = data.get("notes", task.notes)
+                raise ValueError(f"Invalid status: {data['status']}")
+        
+        # Priority change
+        if "priority" in data:
+            new_priority = int(data["priority"])
+            if task.priority != new_priority:
+                updated_fields.append({
+                    "field": "priority",
+                    "old_value": str(task.priority),
+                    "new_value": str(new_priority)
+                })
+                task.priority = new_priority
+        
+        # Notes change
+        if "notes" in data and data["notes"] != task.notes:
+            task.notes = data["notes"]
+            updated_fields.append({
+                "field": "notes",
+                "old_value": task.notes,
+                "new_value": data["notes"]
+            })
 
-        if owner_email := data.get("owner"):
-            owner = User.query.filter_by(email=owner_email).first()
+        # Owner change
+        if "owner" in data:
+            owner = User.query.filter_by(email=data["owner"]).first()
             if not owner:
-                raise ValueError(f"Owner with email {owner_email} not found")
+                raise ValueError(f"Owner with email {data['owner']} not found")
             
             if owner.id != task.owner_id:
-                user_id = get_jwt_identity()
+                updated_fields.append({
+                    "field": "assignee",
+                    "old_value": task.owner.email,
+                    "new_value": owner.email
+                })
+                
+                user_id = get_jwt_identity()  
                 current_user = User.query.get(int(user_id))
-                notification_service.create_task_assignment_notification(task, current_user, owner)
-            
-            task.owner = owner
+                create_task_assignment_notification(task, current_user, owner)
+                # Add email notification for assignment change
+                from app.services.email_services import send_task_assignment_email_notification
+                send_task_assignment_email_notification(task, current_user, owner)
+                
+                task.owner = owner
 
+        # Collaborators change
         collaborators = data.get("collaborators")
-        if collaborators:
+        if collaborators is not None:
             if isinstance(collaborators, str):
                 try:
                     collaborators = json.loads(collaborators)
                 except json.JSONDecodeError:
                     collaborators = []
-
+            
             current_collaborator_emails = [c.email for c in task.collaborators]
             new_collaborators = [c for c in collaborators if c not in current_collaborator_emails]
-
+            removed_collaborators = [c for c in current_collaborator_emails if c not in collaborators]
+            
+            # Track collaborator changes
+            if new_collaborators or removed_collaborators:
+                updated_fields.append({
+                    "field": "collaborators",
+                    "old_value": ", ".join(current_collaborator_emails) if current_collaborator_emails else "None",
+                    "new_value": ", ".join(collaborators) if collaborators else "None"
+                })
+            
             task.collaborators.clear()
             if collaborators:
                 for email in collaborators:
                     user = User.query.filter_by(email=email).first()
                     if user:
                         task.collaborators.append(user)
-
+                        
                         if email in new_collaborators:
-                            user_id = get_jwt_identity()
+                            user_id = get_jwt_identity()  
                             current_user = User.query.get(int(user_id))
-                            notification_service.create_task_assignment_notification(task, current_user, user)
+                            create_task_assignment_notification(task, current_user, user)
+                            # Add email notification for new collaborator
+                            from app.services.email_services import send_task_assignment_email_notification
+                            send_task_assignment_email_notification(task, current_user, user)
 
+        # Handle attachments
         if "existing_attachments" in data:
             existing_attachments = data["existing_attachments"]
             if isinstance(existing_attachments, str):
@@ -280,44 +350,31 @@ def update_task(task_id, data, new_files):
                     task=task
                 )
                 db.session.add(attachment)
+            # Track attachment changes
+            updated_fields.append({
+                "field": "attachments",
+                "old_value": f"{len(task.attachments)} files",
+                "new_value": f"{len(task.attachments) + len(new_files)} files"
+            })
 
         db.session.commit()
 
-        from sqlalchemy.orm.attributes import get_history
-
-        updated_fields = []
-        user_id = get_jwt_identity()
+        # TRIGGER NOTIFICATIONS FOR ALL CHANGES
+        user_id = get_jwt_identity()  
         current_user = User.query.get(int(user_id))
-        updated_by = current_user
-
-        field_mapping = {
-            'status': ('status', lambda x: x.value if x else None),
-            'duedate': ('duedate', lambda x: x.isoformat() if x else None),
-            'priority': ('priority', lambda x: x),
-            'owner_id': ('assignee', lambda x: User.query.get(x).email if User.query.get(x) else None)
-        }
-
-        for field, (display_name, formatter) in field_mapping.items():
-            history = get_history(task, field)
-            if history.has_changes():
-                old_value = formatter(history.deleted[0]) if history.deleted else None
-                new_value = formatter(history.added[0]) if history.added else None
-
-                if old_value != new_value:
-                    updated_fields.append({
-                        "field": display_name,
-                        "old_value": str(old_value) if old_value is not None else "None",
-                        "new_value": str(new_value) if new_value is not None else "None"
-                    })
         
-        if updated_fields and updated_by:
-            notification_service.create_task_update_notification(task, updated_by, updated_fields)
+        # Create in-app notifications for any field changes
+        if updated_fields and current_user:
+            create_task_update_notification(task, current_user, updated_fields)
+            
+            # Send email notifications for any field changes (excluding the user who made changes)
+            from app.services.email_services import send_task_update_email_notification
+            send_task_update_email_notification(task, current_user, updated_fields, current_user.id)
 
-        if 'duedate' in [change.get('field') for change in updated_fields]:
-            notification_service.update_notifications_for_task(task)
-
-        if status_changed_to_completed:
-            notification_service.remove_notifications_for_task(task)
+        # Update due date notifications if due date changed
+        due_date_changed = any(change.get('field') == 'due date' for change in updated_fields)
+        if due_date_changed:
+            update_notifications_for_task(task)
 
         return task
     

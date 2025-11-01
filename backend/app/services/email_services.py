@@ -114,19 +114,24 @@ def send_comment_email_notification(comment, task, excluded_user_id):
     )
 
 def send_task_update_email_notification(task, updated_by, updated_fields, excluded_user_id):
-    """Send email for task updates"""
+    """Send email for task updates with better field tracking"""
     recipients = get_notification_recipients(task, excluded_user_id)
     if not recipients:
+        print(f"DEBUG: No recipients for task update email. Task: {task.title}, Updated by: {updated_by.email}")
         return
     
-    # Format changes better
+    # Format changes in a more readable way
     changes_html = ""
     for change in updated_fields:
+        field_name = change['field'].title()
+        old_val = change['old_value'] or 'Empty'
+        new_val = change['new_value'] or 'Empty'
+        
         changes_html += f"""
-        <div style="background: #f0f9ff; padding: 10px; margin: 5px 0; border-radius: 4px; border-left: 3px solid #0ea5e9;">
-        <strong>{change['field']}:</strong><br>
-        📍 From: {change['old_value']}<br>
-        📍 To: {change['new_value']}
+        <div class="field-change">
+            <strong>🔧 {field_name}:</strong><br>
+            <span style="color: #dc2626;">➤ From: {old_val}</span><br>
+            <span style="color: #16a34a;">➤ To: {new_val}</span>
         </div>
         """
     
@@ -136,12 +141,19 @@ def send_task_update_email_notification(task, updated_by, updated_fields, exclud
     
     {changes_html}
     
-    <strong>Additional Info:</strong><br>
-    • Project: {task.project.name if task.project else 'No Project'}<br>
-    • Updated: {datetime.now().strftime('%Y-%m-%d %H:%M')}
+    <div class="task-info">
+        <p><strong>Current Task Details:</strong></p>
+        <p>• Due Date: {task.duedate.strftime('%Y-%m-%d') if task.duedate else 'Not set'}</p>
+        <p>• Status: {task.status.value}</p>
+        <p>• Priority: {task.priority}</p>
+        <p>• Project: {task.project.name if task.project else 'No Project'}</p>
+        <p>• Updated: {datetime.now().strftime('%Y-%m-%d %H:%M')}</p>
+    </div>
+    
+    <em>These changes affect your schedule and responsibilities.</em>
     """
     
-    email_service.send_notification_email(
+    success = email_service.send_notification_email(
         recipients,
         subject,
         message,
@@ -149,6 +161,9 @@ def send_task_update_email_notification(task, updated_by, updated_fields, exclud
         task.id,
         "task_updated"
     )
+    
+    print(f"DEBUG: Task update email sent to {len(recipients)} recipients. Success: {success}")
+    print(f"DEBUG: Recipients: {recipients}")
 
 def send_due_date_reminder_email(task, days_until_due):
     """Send due date reminder emails"""

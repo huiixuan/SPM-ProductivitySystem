@@ -102,8 +102,14 @@ def create_comment_notification(comment):
 
 
 def create_task_update_notification(task: Task, updated_by: User, updated_fields: list):
+    """Create in-app notifications for task updates with debugging"""
     users_to_notify = {task.owner} | set(task.collaborators or [])
     users_to_notify = {user for user in users_to_notify if user.id != updated_by.id}
+
+    print(f"DEBUG: Creating task update notification for task: {task.title}")
+    print(f"DEBUG: Updated by: {updated_by.email}")
+    print(f"DEBUG: Fields changed: {[f['field'] for f in updated_fields]}")
+    print(f"DEBUG: Users to notify: {[u.email for u in users_to_notify]}")
 
     payload = {
         "project_name": task.project.name if task.project else "No Project",
@@ -120,9 +126,10 @@ def create_task_update_notification(task: Task, updated_by: User, updated_fields
             type=NotificationType.TASK_UPDATED 
         )
         db.session.add(notif)
+        print(f"DEBUG: Added in-app notification for user: {user.email}")
     
     db.session.commit()
-    send_task_update_email_notification(task, updated_by, updated_fields, updated_by.id)
+    print(f"DEBUG: Committed {len(users_to_notify)} in-app notifications")
 
 def create_task_assignment_notification(task: Task, assigned_by: User, assignee: User):
     """Create notification when task is assigned to someone"""
@@ -235,14 +242,22 @@ def remove_notifications_for_task(task: Task):
     db.session.commit()
 
 def update_notifications_for_task(task: Task):
-    """Recreates notifications when task due date changes"""
+    """Recreates notifications when task due date changes with debugging"""
     if not task:
         return
     
-    Notification.query.filter_by(task_id=task.id).delete()
+    print(f"DEBUG: Updating notifications for task: {task.title}")
+    print(f"DEBUG: Current due date: {task.duedate}")
+    
+    # Remove old notifications
+    deleted_count = Notification.query.filter_by(task_id=task.id).delete()
+    print(f"DEBUG: Deleted {deleted_count} old notifications")
+    
     db.session.commit()
 
+    # Create new notifications
     create_notifications_for_task(task)
+    print(f"DEBUG: Created new due date notifications for task")
 
 def get_notifications_for_user(user_id: int):
     """Returns notifications for a user, sorted by recency"""
