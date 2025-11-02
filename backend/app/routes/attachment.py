@@ -15,7 +15,7 @@ def get_attachment_route(attachment_id):
       io.BytesIO(attachment.content),
       download_name=attachment.filename,
       as_attachment=False,
-      mimetype="application/pdf"
+      mimetype="application/octet-stream" 
     )
   
   except Exception as e:
@@ -26,7 +26,14 @@ def get_attachment_by_task(task_id):
   try:
     attachments = attachment_services.get_attachment_by_task(task_id)
     
-    return 
+    attachments_data = [{
+      "id": att.id,
+      "filename": att.filename,
+      "task_id": att.task_id,
+      "project_id": att.project_id
+    } for att in attachments]
+    
+    return jsonify(attachments_data), 200
   
   except Exception as e:
     return jsonify({"success": False, "error": str(e)}), 500

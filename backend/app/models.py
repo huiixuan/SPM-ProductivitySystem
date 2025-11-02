@@ -8,6 +8,7 @@ from datetime import datetime, date
 from sqlalchemy import UniqueConstraint, Index
 from sqlalchemy.dialects.postgresql import ENUM
 
+
 db = SQLAlchemy()
 
 class UserRole(enum.Enum):
@@ -31,6 +32,8 @@ class NotificationType(enum.Enum):
     DUE_DATE_REMINDER = "due_date_reminder"
     NEW_COMMENT = "new_comment"
     TASK_UPDATED = "task_updated"
+    PROJECT_CREATED = "project_created"  # Added
+    PROJECT_UPDATED = "project_updated"  # Added
 
 # association tables
 task_collaborators = db.Table(
@@ -152,11 +155,20 @@ class Attachment(db.Model):
     filename = db.Column(db.String(255), nullable=False)
     content = db.Column(db.LargeBinary, nullable=False)
 
-    task_id = db.Column(db.Integer, db.ForeignKey("tasks.id"), nullable=False)
+    # Make task_id nullable and add check constraint
+    task_id = db.Column(db.Integer, db.ForeignKey("tasks.id"), nullable=True)
     task = relationship("Task", back_populates="attachments")
     
-    project_id = db.Column(db.Integer, db.ForeignKey("projects.id"))
+    project_id = db.Column(db.Integer, db.ForeignKey("projects.id"), nullable=True)
     project = relationship("Project", back_populates="attachments")
+
+    # Add check constraint to ensure at least one foreign key is set
+    __table_args__ = (
+        db.CheckConstraint(
+            '(task_id IS NOT NULL) OR (project_id IS NOT NULL)',
+            name='check_attachment_reference'
+        ),
+    )
 
 class Project(db.Model):
     __tablename__ = "projects"
@@ -205,7 +217,7 @@ class Notification(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-    task_id = db.Column(db.Integer, db.ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False)
+    task_id = db.Column(db.Integer, db.ForeignKey("tasks.id", ondelete="CASCADE"), nullable=True)  # Changed to nullable=True
     type = db.Column(db.Enum(NotificationType, native_enum=False), nullable=False, default=NotificationType.DUE_DATE_REMINDER)
     payload = db.Column(
         JSONB,
@@ -217,9 +229,9 @@ class Notification(db.Model):
     created_at = db.Column(db.DateTime(timezone=True), default=datetime.utcnow)
     is_read = db.Column(db.Boolean, nullable=False, default=False)
 
-
     comment_id = db.Column(db.Integer, db.ForeignKey("comments.id"), nullable=True)
 
+    # Updated constraint to handle NULL task_id for project notifications
     __table_args__ = (
         UniqueConstraint("user_id", "task_id", "trigger_days_before", "type", name="uq_notification_unique_trigger"),
         Index("ix_notification_user_isread_created", "user_id", "is_read", "created_at"),
@@ -252,6 +264,20 @@ class Notification(db.Model):
                 "updated_fields": kwargs.get("updated_fields"),  
                 "updated_by": kwargs.get("updated_by"),
             }
+        elif notification_type == NotificationType.PROJECT_CREATED:
+            return {
+                "project_name": kwargs.get("project_name"),
+                "description": kwargs.get("description"),
+                "deadline": kwargs.get("deadline"),
+                "status": kwargs.get("status"),
+                "created_by": kwargs.get("created_by"),
+            }
+        elif notification_type == NotificationType.PROJECT_UPDATED:
+            return {
+                "project_name": kwargs.get("project_name"),
+                "updated_fields": kwargs.get("updated_fields"),
+                "updated_by": kwargs.get("updated_by"),
+            }
         else:
             return {}
 
@@ -282,4 +308,17 @@ class Notification(db.Model):
                 changes.append(f"{field} from {old_val} to {new_val}")
             changes_str = ', '.join(changes)
             return f"{updated_by} updated '{tt}' in {pn}: {changes_str}"
+        elif self.type == NotificationType.PROJECT_CREATED:
+            project_name = p.get("project_name", "Project")
+            created_by = p.get("created_by", "Someone")
+            return f"New project '{project_name}' created by {created_by}"
+        elif self.type == NotificationType.PROJECT_UPDATED:
+            project_name = p.get("project_name", "Project")
+            updated_by = p.get("updated_by", "Someone")
+            fields = p.get("updated_fields", {})
+            changes = []
+            for field, (old_val, new_val) in fields.items():
+                changes.append(f"{field} from {old_val} to {new_val}")
+            changes_str = ', '.join(changes)
+            return f"Project '{project_name}' updated by {updated_by}: {changes_str}"
         return "New notification"
