@@ -102,6 +102,28 @@ def stub_get_history(monkeypatch):
     monkeypatch.setattr('sqlalchemy.orm.attributes.get_history', lambda *args, **kwargs: _History())
 
 
+@pytest.fixture
+def notification_funcs(monkeypatch):
+    mocks = SimpleNamespace(
+        create_task_update_notification=MagicMock(name="create_task_update_notification"),
+        update_notifications_for_task=MagicMock(name="update_notifications_for_task"),
+        remove_notifications_for_task=MagicMock(name="remove_notifications_for_task"),
+        create_task_assignment_notification=MagicMock(name="create_task_assignment_notification"),
+        send_task_assignment_email_notification=MagicMock(name="send_task_assignment_email_notification"),
+        send_task_update_email_notification=MagicMock(name="send_task_update_email_notification"),
+    )
+
+    monkeypatch.setattr('app.services.task_services.create_task_update_notification', mocks.create_task_update_notification)
+    monkeypatch.setattr('app.services.task_services.update_notifications_for_task', mocks.update_notifications_for_task)
+    monkeypatch.setattr('app.services.task_services.remove_notifications_for_task', mocks.remove_notifications_for_task)
+    monkeypatch.setattr('app.services.task_services.create_task_assignment_notification', mocks.create_task_assignment_notification)
+    monkeypatch.setattr('app.services.task_services.send_task_assignment_email_notification', mocks.send_task_assignment_email_notification)
+    monkeypatch.setattr('app.services.email_services.send_task_assignment_email_notification', mocks.send_task_assignment_email_notification)
+    monkeypatch.setattr('app.services.email_services.send_task_update_email_notification', mocks.send_task_update_email_notification)
+
+    return mocks
+
+
 class TestCreateTask:
     """Tests for create_task function"""
 
@@ -444,9 +466,8 @@ class TestLinkTaskToProject:
 class TestUpdateTask:
     """Tests for update_task function"""
 
-    @patch('app.services.task_services.notification_service')
     @patch('app.services.task_services.Task')
-    def test_update_task_basic_fields(self, mock_task_class, mock_notif, mock_db_session, mock_task):
+    def test_update_task_basic_fields(self, mock_task_class, mock_db_session, mock_task, notification_funcs):
         """Test updating basic task fields"""
         mock_task_class.query.get.return_value = mock_task
 
@@ -466,9 +487,8 @@ class TestUpdateTask:
         assert mock_task.notes == "Updated notes"
         mock_db_session.commit.assert_called()
 
-    @patch('app.services.task_services.notification_service')
     @patch('app.services.task_services.Task')
-    def test_update_task_duedate(self, mock_task_class, mock_notif, mock_db_session, mock_task):
+    def test_update_task_duedate(self, mock_task_class, mock_db_session, mock_task, notification_funcs):
         """Test updating task due date"""
         mock_task_class.query.get.return_value = mock_task
         new_date = "2025-12-31T00:00:00Z"
@@ -479,10 +499,10 @@ class TestUpdateTask:
 
         assert result == mock_task
         mock_db_session.commit.assert_called()
+        notification_funcs.update_notifications_for_task.assert_called_once_with(mock_task)
 
-    @patch('app.services.task_services.notification_service')
     @patch('app.services.task_services.Task')
-    def test_update_task_status(self, mock_task_class, mock_notif, mock_db_session, mock_task):
+    def test_update_task_status(self, mock_task_class, mock_db_session, mock_task, notification_funcs):
         """Test updating task status"""
         mock_task_class.query.get.return_value = mock_task
 
@@ -494,9 +514,8 @@ class TestUpdateTask:
         assert mock_task.status == TaskStatus.ONGOING
         mock_db_session.commit.assert_called()
 
-    @patch('app.services.task_services.notification_service')
     @patch('app.services.task_services.Task')
-    def test_update_task_invalid_status(self, mock_task_class, mock_notif, mock_db_session, mock_task):
+    def test_update_task_invalid_status(self, mock_task_class, mock_db_session, mock_task, notification_funcs):
         """Test updating with invalid status"""
         mock_task_class.query.get.return_value = mock_task
 
@@ -507,27 +526,37 @@ class TestUpdateTask:
 
         mock_db_session.rollback.assert_called()
 
-    @patch('app.services.task_services.notification_service')
     @patch('app.services.task_services.User')
     @patch('app.services.task_services.Task')
-    def test_update_task_owner(self, mock_task_class, mock_user_class, mock_notif, 
-                               mock_db_session, mock_task, mock_user):
+    def test_update_task_owner(self, mock_task_class, mock_user_class, mock_db_session,
+                               mock_task, mock_user, notification_funcs):
         """Test updating task owner"""
         mock_task_class.query.get.return_value = mock_task
-        mock_user_class.query.filter_by.return_value.first.return_value = mock_user
+        existing_owner = Mock(spec=User)
+        existing_owner.email = "owner@example.com"
+        existing_owner.id = 1
+        mock_task.owner = existing_owner
+        mock_task.owner_id = existing_owner.id
+
+        new_owner = Mock(spec=User)
+        new_owner.id = 2
+        new_owner.email = "newowner@example.com"
+        mock_user_class.query.filter_by.return_value.first.return_value = new_owner
+        mock_user_class.query.get.return_value = mock_user
 
         data = {"owner": "newowner@example.com"}
 
         result = update_task(1, data, None)
 
         assert result == mock_task
-        assert mock_task.owner == mock_user
+        assert mock_task.owner == new_owner
+        notification_funcs.create_task_assignment_notification.assert_called_once_with(mock_task, mock_user, new_owner)
+        notification_funcs.send_task_assignment_email_notification.assert_called_once_with(mock_task, mock_user, new_owner)
 
-    @patch('app.services.task_services.notification_service')
     @patch('app.services.task_services.User')
     @patch('app.services.task_services.Task')
-    def test_update_task_collaborators(self, mock_task_class, mock_user_class, mock_notif,
-                                      mock_db_session, mock_task, mock_collaborator):
+    def test_update_task_collaborators(self, mock_task_class, mock_user_class,
+                                      mock_db_session, mock_task, mock_collaborator, notification_funcs):
         """Test updating task collaborators"""
         mock_task_class.query.get.return_value = mock_task
         collaborators_mock = Mock()
@@ -543,11 +572,10 @@ class TestUpdateTask:
         mock_task.collaborators.clear.assert_called_once()
         mock_task.collaborators.append.assert_called()
 
-    @patch('app.services.task_services.notification_service')
     @patch('app.services.task_services.Attachment')
     @patch('app.services.task_services.Task')
-    def test_update_task_add_attachments(self, mock_task_class, mock_attachment_class, mock_notif,
-                                        mock_db_session, mock_task):
+    def test_update_task_add_attachments(self, mock_task_class, mock_attachment_class,
+                                        mock_db_session, mock_task, notification_funcs):
         """Test adding new attachments to task"""
         mock_task_class.query.get.return_value = mock_task
 
@@ -560,9 +588,8 @@ class TestUpdateTask:
         assert result == mock_task
         mock_attachment_class.assert_called_once()
 
-    @patch('app.services.task_services.notification_service')
     @patch('app.services.task_services.Task')
-    def test_update_task_remove_attachments(self, mock_task_class, mock_notif, mock_db_session, mock_task):
+    def test_update_task_remove_attachments(self, mock_task_class, mock_db_session, mock_task, notification_funcs):
         """Test removing attachments from task"""
         mock_task_class.query.get.return_value = mock_task
         
@@ -577,21 +604,21 @@ class TestUpdateTask:
         assert result == mock_task
         mock_db_session.delete.assert_called_once_with(mock_attachment)
 
-    @patch('app.services.task_services.notification_service')
     @patch('app.services.task_services.Task')
-    def test_update_task_completed_removes_notifications(self, mock_task_class, mock_notif,
-                                                        mock_db_session, mock_task):
+    def test_update_task_completed_removes_notifications(self, mock_task_class,
+                                                        mock_db_session, mock_task, notification_funcs):
         """Test that completing a task removes notifications"""
         mock_task_class.query.get.return_value = mock_task
         # Mock the status to be COMPLETED after update
-        mock_task.status = TaskStatus.COMPLETED
+        mock_task.status = TaskStatus.UNASSIGNED
 
         data = {"status": "Completed"}
 
         result = update_task(1, data, None)
 
-        # Verify notification removal was called
-        mock_notif.remove_notifications_for_task.assert_called_once_with(mock_task)
+        # Verify status change notification was triggered
+        notification_funcs.create_task_update_notification.assert_called_once()
+        notification_funcs.remove_notifications_for_task.assert_not_called()
 
     @patch('app.services.task_services.Task')
     def test_update_task_not_found(self, mock_task_class, mock_db_session):
@@ -612,9 +639,8 @@ class TestUpdateTask:
 
         mock_db_session.rollback.assert_called()
 
-    @patch('app.services.task_services.notification_service')
     @patch('app.services.task_services.Task')
-    def test_update_task_invalid_date_format(self, mock_task_class, mock_notif, mock_db_session, mock_task):
+    def test_update_task_invalid_date_format(self, mock_task_class, mock_db_session, mock_task, notification_funcs):
         """Test updating with invalid date format"""
         mock_task_class.query.get.return_value = mock_task
 

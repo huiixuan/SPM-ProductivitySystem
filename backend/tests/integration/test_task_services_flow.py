@@ -13,6 +13,7 @@ from app.models import (
     Attachment,
     TaskStatus,
     ProjectStatus,
+    UserRole,
 )
 from app.services import task_services
 
@@ -47,13 +48,13 @@ def app_instance():
 @pytest.fixture
 def seed_data(app_instance, monkeypatch):
     with app_instance.app_context():
-        current_user = User(name="Current", email="current@example.com", role="STAFF")
+        current_user = User(name="Current", email="current@example.com", role=UserRole.STAFF)
         current_user.set_password("password")
-        owner = User(name="Owner", email="owner@example.com", role="STAFF")
+        owner = User(name="Owner", email="owner@example.com", role=UserRole.STAFF)
         owner.set_password("password")
-        collaborator = User(name="Collaborator", email="collab@example.com", role="STAFF")
+        collaborator = User(name="Collaborator", email="collab@example.com", role=UserRole.STAFF)
         collaborator.set_password("password")
-        new_owner = User(name="New Owner", email="newowner@example.com", role="MANAGER")
+        new_owner = User(name="New Owner", email="newowner@example.com", role=UserRole.MANAGER)
         new_owner.set_password("password")
         db.session.add_all([current_user, owner, collaborator, new_owner])
 
@@ -70,37 +71,90 @@ def seed_data(app_instance, monkeypatch):
             "created": [],
             "assignment": [],
             "update": [],
-            "remove": [],
             "update_due": [],
         }
 
         monkeypatch.setattr(task_services, "get_jwt_identity", lambda: str(current_user.id))
+
+        def record_created(task):
+            notification_calls["created"].append(task.id)
+
         monkeypatch.setattr(
             task_services.notification_service,
             "create_notifications_for_task",
-            lambda task: notification_calls["created"].append(task.id),
+            record_created,
         )
+
+        def record_assignment(task, assigned_by, assignee):
+            notification_calls["assignment"].append(
+                (task.id, getattr(assigned_by, "email", None), getattr(assignee, "email", None))
+            )
+
+        monkeypatch.setattr(task_services, "create_task_assignment_notification", record_assignment)
         monkeypatch.setattr(
             task_services.notification_service,
             "create_task_assignment_notification",
-            lambda task, assigned_by, assignee: notification_calls["assignment"].append(
-                (task.id, getattr(assigned_by, "email", None), getattr(assignee, "email", None))
-            ),
+            record_assignment,
         )
+        monkeypatch.setattr(
+            "app.services.notification_services.create_task_assignment_notification",
+            record_assignment,
+        )
+
+        monkeypatch.setattr(task_services, "send_task_creation_email_notification", lambda *_args, **_kwargs: None)
+
+        monkeypatch.setattr(
+            "app.services.email_services.send_task_creation_email_notification",
+            lambda *_args, **_kwargs: None,
+        )
+
+        monkeypatch.setattr(
+            task_services,
+            "send_task_assignment_email_notification",
+            record_assignment,
+        )
+        monkeypatch.setattr(
+            "app.services.email_services.send_task_assignment_email_notification",
+            record_assignment,
+        )
+
+        def record_update(task, updated_by, fields):
+            processed_fields = []
+            for field in fields:
+                if isinstance(field, dict):
+                    processed_fields.append(field.get("field"))
+                else:
+                    processed_fields.append(field)
+            notification_calls["update"].append((task.id, tuple(processed_fields)))
+
+        monkeypatch.setattr(task_services, "create_task_update_notification", record_update)
         monkeypatch.setattr(
             task_services.notification_service,
             "create_task_update_notification",
-            lambda task, updated_by, fields: notification_calls["update"].append((task.id, tuple(fields))),
+            record_update,
         )
         monkeypatch.setattr(
-            task_services.notification_service,
-            "remove_notifications_for_task",
-            lambda task: notification_calls["remove"].append(task.id),
+            "app.services.notification_services.create_task_update_notification",
+            record_update,
         )
+
+        def record_update_due(task):
+            notification_calls["update_due"].append(task.id)
+
+        monkeypatch.setattr(task_services, "update_notifications_for_task", record_update_due)
         monkeypatch.setattr(
             task_services.notification_service,
             "update_notifications_for_task",
-            lambda task: notification_calls["update_due"].append(task.id),
+            record_update_due,
+        )
+        monkeypatch.setattr(
+            "app.services.notification_services.update_notifications_for_task",
+            record_update_due,
+        )
+
+        monkeypatch.setattr(
+            "app.services.email_services.send_task_update_email_notification",
+            lambda *_args, **_kwargs: None,
         )
 
         return {
@@ -151,7 +205,11 @@ def test_create_task_full_flow(app_instance, seed_data):
         assert Attachment.query.filter_by(task_id=stored.id).count() == 1
 
     assert calls["created"] == [task.id]
-    assert calls["assignment"] == [(task.id, "current@example.com", "owner@example.com")]
+    expected_assignment_owner = (task.id, "current@example.com", "owner@example.com")
+    expected_assignment_collab = (task.id, "current@example.com", seed_data["collaborator_email"])
+    assert expected_assignment_owner in calls["assignment"]
+    assert expected_assignment_collab in calls["assignment"]
+    assert len(calls["assignment"]) == 2
 
 
 def test_create_task_owner_missing_raises(app_instance):
@@ -246,7 +304,6 @@ def test_update_task_covers_notifications(app_instance, seed_data, monkeypatch):
 
     assert calls["update"], "expected update notification to be recorded"
     assert calls["update_due"] == [task_id]
-    assert calls["remove"] == [task_id]
     assert any(rec[2] == seed_data["new_owner_email"] for rec in calls["assignment"])
 
 

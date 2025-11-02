@@ -1,6 +1,7 @@
 import io
 from datetime import date
 from types import SimpleNamespace
+from unittest.mock import patch
 
 import pytest
 from sqlalchemy.exc import SQLAlchemyError
@@ -60,16 +61,20 @@ def test_create_project_with_collaborators(session, app_instance):
         db.session.add_all([owner, collaborator])
         db.session.commit()
 
-        project = create_project(
-            name="Launch",
-            description="New project",
-            deadline=date(2025, 5, 1),
-            status=ProjectStatus.IN_PROGRESS,
-            owner_email=owner.email,
-            collaborator_emails=[collaborator.email],
-            attachments=None,
-            notes="Important notes",
-        )
+        with patch('flask_jwt_extended.get_jwt_identity', return_value=owner.id), \
+             patch('app.services.project_services.send_project_creation_email_notification') as mock_email:
+            project = create_project(
+                name="Launch",
+                description="New project",
+                deadline=date(2025, 5, 1),
+                status=ProjectStatus.IN_PROGRESS,
+                owner_email=owner.email,
+                collaborator_emails=[collaborator.email],
+                attachments=None,
+                notes="Important notes",
+            )
+
+            mock_email.assert_called_once()
 
         assert project.id is not None
         assert project.collaborators == [collaborator]
@@ -192,12 +197,15 @@ def test_update_project_changes_core_fields_and_collaborators(app_instance):
             "existing_attachments": "[]",
         }
 
-        updated = update_project(
-            project.id,
-            data,
-            new_files=None,
-            collaborator_emails=[collaborator.email],
-        )
+        with patch("flask_jwt_extended.get_jwt_identity", return_value=owner.id), \
+             patch("app.services.project_services.send_project_update_email_notification"), \
+             patch("app.services.project_services.send_project_collaborator_added_email_notification"):
+            updated = update_project(
+                project.id,
+                data,
+                new_files=None,
+                collaborator_emails=[collaborator.email],
+            )
 
         assert updated.name == "Updated"
         assert updated.owner == new_owner

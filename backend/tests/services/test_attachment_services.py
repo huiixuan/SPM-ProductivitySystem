@@ -4,7 +4,7 @@ import pytest
 from sqlalchemy.exc import SQLAlchemyError
 
 from app import create_app
-from app.models import db, Attachment, Task, User, TaskStatus
+from app.models import db, Attachment, Task, User, TaskStatus, UserRole
 from app.services import attachment_services
 from app.services.attachment_services import get_attachment, get_attachment_by_task
 
@@ -29,7 +29,7 @@ def app_instance():
 
 def test_get_attachment_returns_instance(app_instance):
     with app_instance.app_context():
-        owner = User(name="Owner", email="attachment-owner@example.com", role="STAFF")
+        owner = User(name="Owner", email="attachment-owner@example.com", role=UserRole.STAFF)
         owner.set_password("password")
         task = Task(title="T", status=TaskStatus.UNASSIGNED, owner=owner, duedate=date.today())
         db.session.add_all([owner, task])
@@ -56,13 +56,22 @@ def test_get_attachment_database_error_translates_to_runtime_error(monkeypatch, 
 
         monkeypatch.setattr(attachment_services.Attachment, "query", FailingQuery())
 
-        with pytest.raises(RuntimeError, match="Database error while retrieving attachment"):
+        rollback_called = {"value": False}
+
+        def fake_rollback():
+            rollback_called["value"] = True
+
+        monkeypatch.setattr(attachment_services.db.session, "rollback", fake_rollback)
+
+        with pytest.raises(RuntimeError, match=r"Database error while retrieving attachment 1: db failure"):
             get_attachment(1)
+
+        assert rollback_called["value"]
 
 
 def test_get_attachment_by_task_returns_list(app_instance):
     with app_instance.app_context():
-        owner = User(name="Owner", email="owner2@example.com", role="STAFF")
+        owner = User(name="Owner", email="owner2@example.com", role=UserRole.STAFF)
         owner.set_password("password")
         task = Task(title="Task", status=TaskStatus.UNASSIGNED, owner=owner, duedate=date.today())
         db.session.add_all([owner, task])
