@@ -1,5 +1,4 @@
 import json
-# --- Imports are correct ---
 from app.models import db, Project, Attachment, User, ProjectStatus, Task, TaskStatus
 from app.services.user_services import get_user_by_email
 from sqlalchemy.exc import SQLAlchemyError
@@ -11,8 +10,7 @@ from app.services.email_services import (
     send_project_collaborator_added_email_notification
 )
 
-# ... (all other functions: create_project, get_all_projects, etc. stay the same) ...
-def create_project(name, description, deadline, status, owner_email, collaborator_emails, attachments, notes):
+def create_project(name, description, deadline, status, owner_email, collaborator_emails, attachments, notes, current_user_id=None):
     try:
         owner = get_user_by_email(owner_email)
         if not owner:
@@ -20,7 +18,6 @@ def create_project(name, description, deadline, status, owner_email, collaborato
         
         collaborators = []
         if collaborator_emails:
-            # Handle the case where collaborators might be sent as a single string '[]'
             if isinstance(collaborator_emails, list) and len(collaborator_emails) == 1 and collaborator_emails[0] == '[]':
                 collaborator_emails = []
 
@@ -39,22 +36,30 @@ def create_project(name, description, deadline, status, owner_email, collaborato
             notes=notes
         )
 
+        db.session.add(project)
+        db.session.flush()  
+
         if attachments:
             for file in attachments:
-                attachment = Attachment(filename=file.filename, content=file.read(), project=project)
+                attachment = Attachment(
+                    filename=file.filename, 
+                    content=file.read(), 
+                    project_id=project.id 
+                )
                 db.session.add(attachment)
 
-        db.session.add(project)
         db.session.commit()
         
-        # Get current user for email notification
-        from flask_jwt_extended import get_jwt_identity
-        current_user_id = get_jwt_identity()
-        current_user = User.query.get(int(current_user_id))
-        
-        # Send project creation email notification
-        if current_user:
-            send_project_creation_email_notification(project, current_user)
+        # Use provided current_user_id instead of get_jwt_identity()
+        if current_user_id:
+            current_user = User.query.get(int(current_user_id))
+            
+            # Send project creation email notification
+            if current_user:
+                send_project_creation_email_notification(project, current_user)
+                # Create in-app notifications
+                from app.services.notification_services import create_project_creation_notification
+                create_project_creation_notification(project, current_user)
         
         return project
     
@@ -98,7 +103,7 @@ def get_project_users(project_id):
     except SQLAlchemyError as e:
         raise RuntimeError(f"Database error while fetching project {project_id}: {e}")
 
-def update_project(project_id, data, new_files, collaborator_emails=None):
+def update_project(project_id, data, new_files, collaborator_emails=None, current_user_id=None):
     try:
         project = Project.query.get(project_id)
         if not project:
@@ -107,6 +112,11 @@ def update_project(project_id, data, new_files, collaborator_emails=None):
         # Track changes for notification
         changes = {}
         old_collaborators = set(project.collaborators)
+
+        # Store initial attachment info
+        initial_attachment_count = len(project.attachments)
+        initial_attachment_names = [att.filename for att in project.attachments]
+        removed_attachments = []
         
         # Update simple fields
         if "name" in data and data["name"] != project.name:
@@ -126,13 +136,25 @@ def update_project(project_id, data, new_files, collaborator_emails=None):
             project.status = ProjectStatus(data["status"])
             
         if "deadline" in data and data["deadline"]:
-            new_deadline = datetime.fromisoformat(data["deadline"].replace("Z", "+00:00")).date()
-            if project.deadline != new_deadline:
-                changes["Deadline"] = (
-                    project.deadline.strftime('%Y-%m-%d') if project.deadline else 'Not set',
-                    new_deadline.strftime('%Y-%m-%d')
-                )
-                project.deadline = new_deadline
+            try:
+                date_str = data["deadline"]
+                # Remove timezone 'Z' if present and handle as naive date (Fix timezone issue)
+                if date_str.endswith('Z'):
+                    date_str = date_str[:-1]
+                if 'T' in date_str:
+                    new_deadline = datetime.fromisoformat(date_str).date()
+                else:
+                    new_deadline = datetime.fromisoformat(date_str).date()
+            
+                if project.deadline != new_deadline:
+                    changes["Deadline"] = (
+                        project.deadline.strftime('%Y-%m-%d') if project.deadline else 'Not set',
+                        new_deadline.strftime('%Y-%m-%d')
+                    )
+                    project.deadline = new_deadline
+            except ValueError as e:
+                print(f"Date parsing error: {e}")
+                raise ValueError(f"Invalid date format: {data['deadline']}")
 
         # Update owner
         new_owner = None
@@ -170,29 +192,45 @@ def update_project(project_id, data, new_files, collaborator_emails=None):
             
             for att in project.attachments[:]:
                 if att.id not in existing_ids:
+                    removed_attachments.append(att.filename)
                     db.session.delete(att)
 
+        added_attachments = []
         if new_files:
             for file in new_files:
-                attachment = Attachment(filename=file.filename, content=file.read(), project=project)
+                attachment = Attachment(
+                    filename=file.filename, 
+                    content=file.read(), 
+                    project_id=project.id
+                )
                 db.session.add(attachment)
+                added_attachments.append(file.filename)
+
+        # Track attachment changes
+        if removed_attachments or added_attachments:
+            if removed_attachments:
+                changes["Attachments Removed"] = (f"{initial_attachment_count} files", f"Removed: {', '.join(removed_attachments)}")
+            if added_attachments:
+                changes["Attachments Added"] = (f"{initial_attachment_count} files", f"Added: {', '.join(added_attachments)}")
 
         db.session.commit()
         
-        # Get current user for email notification
-        from flask_jwt_extended import get_jwt_identity
-        current_user_id = get_jwt_identity()
-        current_user = User.query.get(int(current_user_id))
-        
-        # Send email notifications
-        if current_user:
-            # Send general project update notification if there were changes
-            if changes:
-                send_project_update_email_notification(project, current_user, changes)
+        # Use provided current_user_id instead of get_jwt_identity()
+        if current_user_id:
+            current_user = User.query.get(int(current_user_id))
             
-            # Send specific notification for new collaborators
-            if new_collaborators:
-                send_project_collaborator_added_email_notification(project, current_user, new_collaborators)
+            # Send email notifications
+            if current_user:
+                # Send general project update notification if there were changes
+                if changes:
+                    send_project_update_email_notification(project, current_user, changes)
+                    # ALSO CREATE IN-APP NOTIFICATIONS FOR PROJECT UPDATES
+                    from app.services.notification_services import create_project_update_notification
+                    create_project_update_notification(project, current_user, changes)
+                
+                # Send specific notification for new collaborators
+                if new_collaborators:
+                    send_project_collaborator_added_email_notification(project, current_user, new_collaborators)
         
         return project
     
@@ -200,9 +238,6 @@ def update_project(project_id, data, new_files, collaborator_emails=None):
         db.session.rollback()
         raise e
 
-# ------------------------------------
-# THIS IS THE FUNCTION THE SERVER CAN'T FIND
-# ------------------------------------
 def get_project_report_data(project_id, user_id):
     try:
         project = Project.query.get(project_id)
