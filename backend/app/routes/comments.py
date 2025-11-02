@@ -1,7 +1,7 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from app.models import db, Comment, Task
-from app.services.notification_services import create_comment_notification
+from app.services import notification_services
 
 comments_bp = Blueprint("comments", __name__)
 
@@ -26,7 +26,7 @@ def create_comment(task_id):
     db.session.add(comment)
     db.session.commit()
 
-    create_comment_notification(comment)
+    notification_services.create_comment_notification(comment)
 
     return jsonify({
         "success": True,

@@ -26,9 +26,6 @@ def create_project_route():
         status_enum = ProjectStatus(status) if status else ProjectStatus.NOT_STARTED
         deadline = datetime.fromisoformat(deadline_str).date() if deadline_str else None
 
-        # Get current user ID and pass it to the service
-        current_user_id = get_jwt_identity()
-
         project = project_services.create_project(
             name=name,
             description=description,
@@ -37,8 +34,7 @@ def create_project_route():
             owner_email=owner_email,
             collaborator_emails=collaborator_emails,
             attachments=files,
-            notes=notes,
-            current_user_id=current_user_id
+            notes=notes
         )
 
         return jsonify({
@@ -52,6 +48,7 @@ def create_project_route():
         traceback.print_exc()
         return jsonify({"success": False, "error": str(e)}), 500
 
+# --- THIS IS THE CORRECTED FUNCTION ---
 @project_bp.route("/get-all-projects", methods=["GET"])
 @jwt_required()
 def get_all_projects_route():
@@ -100,17 +97,7 @@ def update_project_route(project_id):
         data = request.form
         new_files = request.files.getlist("attachments")
         collaborator_emails = data.getlist("collaborators")
-        
-        # Get current user ID and pass it to the service
-        current_user_id = get_jwt_identity()
-        
-        project = project_services.update_project(
-            project_id, 
-            dict(data), 
-            new_files, 
-            collaborator_emails,
-            current_user_id=current_user_id
-        )
+        project = project_services.update_project(project_id, dict(data), new_files, collaborator_emails)
 
         return jsonify({
             "success": True, 
@@ -122,6 +109,8 @@ def update_project_route(project_id):
         traceback.print_exc()
         return jsonify({"success": False, "error": str(e)}), 500
     
+    
+
 @project_bp.route("/get-report-data/<int:project_id>", methods=["GET"])
 @jwt_required()
 def get_project_report_route(project_id):

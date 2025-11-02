@@ -12,14 +12,12 @@ from app.services.notification_services import (
     create_comment_notification,
     create_task_update_notification,
     create_task_assignment_notification,
-    create_task_creation_notification  # Added
 )
 from flask_jwt_extended import get_jwt_identity
 from app.services.email_services import send_task_assignment_email_notification
 from app.services.email_services import (
     send_task_creation_email_notification,
-    send_task_assignment_email_notification,
-    send_task_update_email_notification
+    send_task_assignment_email_notification
 )
 
 class _NotificationFacade:
@@ -40,9 +38,6 @@ class _NotificationFacade:
 
     def create_task_assignment_notification(self, *args, **kwargs):
         return create_task_assignment_notification(*args, **kwargs)
-
-    def create_task_creation_notification(self, *args, **kwargs):  # Added
-        return create_task_creation_notification(*args, **kwargs)
 
 
 notification_service = _NotificationFacade()
@@ -92,17 +87,10 @@ def create_task(title, description, duedate, status, owner_email, collaborator_e
             except Exception as e:
                 print(f"DEBUG: Error sending task creation email: {e}")
             
-            # Create in-app task creation notification
-            try:
-                notification_service.create_task_creation_notification(task, current_user)
-            except Exception as e:
-                print(f"DEBUG: Error creating task creation notification: {e}")
-            
             # Also send individual assignment notifications
             if current_user.id != owner.id:
                 try:
                     send_task_assignment_email_notification(task, current_user, owner)
-                    create_task_assignment_notification(task, current_user, owner)
                 except Exception as e:
                     print(f"DEBUG: Error sending owner assignment email: {e}")
             
@@ -110,7 +98,6 @@ def create_task(title, description, duedate, status, owner_email, collaborator_e
                 if collaborator.id != current_user.id:
                     try:
                         send_task_assignment_email_notification(task, current_user, collaborator)
-                        create_task_assignment_notification(task, current_user, collaborator)
                     except Exception as e:
                         print(f"DEBUG: Error sending collaborator assignment email to {collaborator.email}: {e}")
 
@@ -207,45 +194,37 @@ def update_task(task_id, data, new_files):
         if not task:
             raise ValueError(f"Task with task ID {task_id} not found")
         
+        old_values = {
+            'status': task.status,
+            'duedate': task.duedate,
+            'priority': task.priority,
+            'owner_id': task.owner_id
+        }
+        
         # Track changes for notifications
         updated_fields = []
-
-        # Store initial attachment count and names for tracking
-        initial_attachment_count = len(task.attachments)
-        initial_attachment_names = [att.filename for att in task.attachments]
         
         # Update fields and track changes
         if "title" in data and data["title"] != task.title:
+            task.title = data["title"]
             updated_fields.append({
                 "field": "title",
                 "old_value": task.title,
                 "new_value": data["title"]
             })
-            task.title = data["title"]
         
         if "description" in data and data["description"] != task.description:
+            task.description = data["description"]
             updated_fields.append({
                 "field": "description", 
                 "old_value": task.description,
                 "new_value": data["description"]
             })
-            task.description = data["description"]
             
-        # Due date change - FIXED DATE PARSING (Timezone issue)
+        # Due date change - IMPORTANT: This triggers notifications
         if "duedate" in data and data["duedate"]:
             try:
-                # Parse the date properly with timezone handling
-                date_str = data["duedate"]
-                # Remove timezone 'Z' if present and handle as naive date
-                if date_str.endswith('Z'):
-                    date_str = date_str[:-1]
-                if 'T' in date_str:
-                    # Parse as datetime and convert to date
-                    new_duedate = datetime.fromisoformat(date_str).date()
-                else:
-                    # Simple date string
-                    new_duedate = datetime.fromisoformat(date_str).date()
-            
+                new_duedate = datetime.fromisoformat(data["duedate"].replace('Z', '+00:00'))
                 if task.duedate != new_duedate:
                     updated_fields.append({
                         "field": "due date",
@@ -256,7 +235,6 @@ def update_task(task_id, data, new_files):
             except ValueError as e:
                 print(f"Date parsing error: {e}")
                 raise ValueError(f"Invalid date format: {data['duedate']}")
-        
         
         # Status change
         if "status" in data and data["status"]:
@@ -269,10 +247,6 @@ def update_task(task_id, data, new_files):
                         "new_value": new_status.value
                     })
                     task.status = new_status
-                    
-                    # Remove notifications if task is completed
-                    if new_status == TaskStatus.COMPLETED:
-                        notification_service.remove_notifications_for_task(task)
             except ValueError:
                 raise ValueError(f"Invalid status: {data['status']}")
         
@@ -289,12 +263,12 @@ def update_task(task_id, data, new_files):
         
         # Notes change
         if "notes" in data and data["notes"] != task.notes:
+            task.notes = data["notes"]
             updated_fields.append({
                 "field": "notes",
                 "old_value": task.notes,
                 "new_value": data["notes"]
             })
-            task.notes = data["notes"]
 
         # Owner change
         if "owner" in data:
@@ -311,7 +285,9 @@ def update_task(task_id, data, new_files):
                 
                 user_id = get_jwt_identity()  
                 current_user = User.query.get(int(user_id))
-                notification_service.create_task_assignment_notification(task, current_user, owner)
+                create_task_assignment_notification(task, current_user, owner)
+                # Add email notification for assignment change
+                from app.services.email_services import send_task_assignment_email_notification
                 send_task_assignment_email_notification(task, current_user, owner)
                 
                 task.owner = owner
@@ -347,11 +323,12 @@ def update_task(task_id, data, new_files):
                         if email in new_collaborators:
                             user_id = get_jwt_identity()  
                             current_user = User.query.get(int(user_id))
-                            notification_service.create_task_assignment_notification(task, current_user, user)
+                            create_task_assignment_notification(task, current_user, user)
+                            # Add email notification for new collaborator
+                            from app.services.email_services import send_task_assignment_email_notification
                             send_task_assignment_email_notification(task, current_user, user)
 
-        # Handle attachments - FIXED ATTACHMENT HANDLING
-        removed_attachments = []
+        # Handle attachments
         if "existing_attachments" in data:
             existing_attachments = data["existing_attachments"]
             if isinstance(existing_attachments, str):
@@ -361,16 +338,10 @@ def update_task(task_id, data, new_files):
                     existing_attachments = []
             
             existing_ids = [att.get("id") for att in existing_attachments if att.get("id")]
-            
-            # Track removed attachments - ensure we get actual filenames
             for att in task.attachments[:]:
                 if att.id not in existing_ids:
-                    # Get the actual filename, not Mock object
-                    filename = getattr(att, 'filename', str(att))
-                    removed_attachments.append(filename)
                     db.session.delete(att)
 
-        added_attachments = []
         if new_files:
             for file in new_files:
                 attachment = Attachment(
@@ -379,21 +350,11 @@ def update_task(task_id, data, new_files):
                     task=task
                 )
                 db.session.add(attachment)
-                added_attachments.append(file.filename)
-        
-        # Track attachment changes in a detailed way
-        if removed_attachments or added_attachments:
-            changes = []
-            if removed_attachments:
-                changes.append(f"Removed: {', '.join(removed_attachments)}")
-            if added_attachments:
-                changes.append(f"Added: {', '.join(added_attachments)}")
-            
+            # Track attachment changes
             updated_fields.append({
                 "field": "attachments",
-                "old_value": f"{initial_attachment_count} files: {', '.join(initial_attachment_names)}",
-                "new_value": f"{len(task.attachments)} files: {', '.join([att.filename for att in task.attachments])}",
-                "detailed_changes": changes
+                "old_value": f"{len(task.attachments)} files",
+                "new_value": f"{len(task.attachments) + len(new_files)} files"
             })
 
         db.session.commit()
@@ -404,17 +365,17 @@ def update_task(task_id, data, new_files):
         
         # Create in-app notifications for any field changes
         if updated_fields and current_user:
-            notification_service.create_task_update_notification(task, current_user, updated_fields)
+            create_task_update_notification(task, current_user, updated_fields)
             
             # Send email notifications for any field changes (excluding the user who made changes)
+            from app.services.email_services import send_task_update_email_notification
             send_task_update_email_notification(task, current_user, updated_fields, current_user.id)
 
-        # Update due date notifications if due date changed and task is not completed
+        # Update due date notifications if due date changed
         due_date_changed = any(change.get('field') == 'due date' for change in updated_fields)
-        if due_date_changed and task.status != TaskStatus.COMPLETED:
-            notification_service.update_notifications_for_task(task)
+        if due_date_changed:
+            update_notifications_for_task(task)
 
-        print(f"DEBUG: Task {task_id} updated successfully with {len(updated_fields)} changes")
         return task
     
     except SQLAlchemyError as e:

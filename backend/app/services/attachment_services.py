@@ -1,7 +1,6 @@
 from app.models import db, Attachment
 from sqlalchemy.exc import SQLAlchemyError
 
-
 def get_attachment(attachment_id):
   try:
     attachment = Attachment.query.get(attachment_id)

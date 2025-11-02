@@ -10,26 +10,12 @@ class EmailService:
         self.power_automate_webhook_url = os.getenv('POWER_AUTOMATE_WEBHOOK_URL')
         self.enabled = bool(self.power_automate_webhook_url)
         self.last_sent = {}
-        
-        # Different cooldown periods for different notification types
-        self.cooldown_periods = {
-            "due_date_reminder": 86400,  # 24 hours for due date reminders
-            "task_assignment": 300,      # 5 minutes for assignments
-            "task_creation": 300,        # 5 minutes for task creation
-            "task_updated": 300,         # 5 minutes for updates
-            "new_comment": 300,          # 5 minutes for comments
-            "project_creation": 300,     # 5 minutes for projects
-            "project_update": 300,       # 5 minutes for project updates
-            "project_collaborator_added": 300  # 5 minutes for project collaborator added
-        }
+        self.cooldown = 300  # 5 minutes between emails for same task
     
-    def can_send_email(self, task_id, recipient, notification_type):
-        key = f"{task_id}_{recipient}_{notification_type}"
+    def can_send_email(self, task_id, recipient):
+        key = f"{task_id}_{recipient}"
         now = datetime.now().timestamp()
-        cooldown = self.cooldown_periods.get(notification_type, 300)  # Default 5 minutes
-        
-        if key in self.last_sent and now - self.last_sent[key] < cooldown:
-            print(f"DEBUG: Email cooldown active for {recipient}, type: {notification_type}")
+        if key in self.last_sent and now - self.last_sent[key] < self.cooldown:
             return False
         self.last_sent[key] = now
         return True
@@ -43,11 +29,11 @@ class EmailService:
         # Filter recipients to avoid spamming the same person
         filtered_recipients = []
         for recipient in (recipient_emails if isinstance(recipient_emails, list) else [recipient_emails]):
-            if self.can_send_email(task_id, recipient, notification_type):
+            if self.can_send_email(task_id, recipient):
                 filtered_recipients.append(recipient)
         
         if not filtered_recipients:
-            print(f"DEBUG: All recipients are in cooldown period for notification type: {notification_type}")
+            print("DEBUG: All recipients are in cooldown period")
             return False
         
         try:
@@ -61,7 +47,7 @@ class EmailService:
                 "app_url": f"http://localhost:5173/tasks/{task_id}"
             }
             
-            print(f"DEBUG: Sending {notification_type} email to {filtered_recipients}")
+            print(f"DEBUG: Sending email to {filtered_recipients}")
             print(f"DEBUG: Subject: {subject}")
             
             response = requests.post(
