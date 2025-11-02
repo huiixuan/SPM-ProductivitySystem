@@ -49,14 +49,20 @@ jobs:
                   DB_HOST: localhost
                   DB_PORT: 5432
                   PYTHONPATH: ${{ github.workspace }}/backend
-              run: pytest
+              run: pytest --cov=. --cov-report=xml --cov-report=html --cov-fail-under=80
 
-            - name: Upload coverage report
+            - name: Upload XML coverage report
               if: always()
               uses: actions/upload-artifact@v4
               with:
                   name: backend-coverage
                   path: backend/coverage.xml
+            - name: Upload HTML coverage report
+              if: always()
+              uses: actions/upload-artifact@v4
+              with:
+                  name: backend-coverage-html
+                  path: backend/htmlcov
 
     frontend:
         runs-on: ubuntu-latest
