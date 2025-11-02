@@ -42,7 +42,6 @@ def create_notifications_for_task(task: Task):
         return
 
     users_to_notify = {task.owner} | set(task.collaborators or [])
-    notification_created = False
     
     # Remove old due date notifications for this task
     Notification.query.filter_by(
@@ -50,26 +49,29 @@ def create_notifications_for_task(task: Task):
         type=NotificationType.DUE_DATE_REMINDER
     ).delete()
     
+    notification_created = False
+    
     for user in users_to_notify:
-        # Only create notification for the exact remaining days if it matches 7, 3, or 1
-        if remaining_days in [7, 3, 1]:
-            payload = {
-                "project_name": task.project.name if task.project else "No Project",
-                "task_title": task.title,
-                "duedate": due_date.isoformat(),
-                "days_until_due": remaining_days
-            }
-            
-            notif = Notification(
-                user_id=user.id,
-                task_id=task.id,
-                trigger_days_before=remaining_days,
-                payload=payload,
-                type=NotificationType.DUE_DATE_REMINDER
-            )
-            db.session.add(notif)
-            notification_created = True
-            print(f"DEBUG: Created {remaining_days}-day notification for user: {user.email}")
+        # Create notifications for 7, 3, and 1 days before due date
+        for days_before in [7, 3, 1]:
+            if remaining_days == days_before:
+                payload = {
+                    "project_name": task.project.name if task.project else "No Project",
+                    "task_title": task.title,
+                    "duedate": due_date.isoformat(),
+                    "days_until_due": remaining_days
+                }
+                
+                notif = Notification(
+                    user_id=user.id,
+                    task_id=task.id,
+                    trigger_days_before=remaining_days,
+                    payload=payload,
+                    type=NotificationType.DUE_DATE_REMINDER
+                )
+                db.session.add(notif)
+                notification_created = True
+                print(f"DEBUG: Created {remaining_days}-day notification for user: {user.email}")
 
     if notification_created:
         db.session.commit()
@@ -77,9 +79,6 @@ def create_notifications_for_task(task: Task):
         
         # Send email only for the exact remaining days
         if remaining_days in [7, 3, 1]:
-            send_due_date_reminder_email(task, remaining_days)
-        elif remaining_days < 0:
-            # Send overdue notification (only once per day)
             send_due_date_reminder_email(task, remaining_days)
 
 
@@ -111,6 +110,8 @@ def create_comment_notification(comment):
         db.session.add(notif)
     
     db.session.commit()
+    
+    # Always send email notification for comments, not just when @mentioning
     send_comment_email_notification(comment, task, comment.user_id)
 
 
@@ -143,6 +144,40 @@ def create_task_update_notification(task: Task, updated_by: User, updated_fields
     
     db.session.commit()
     print(f"DEBUG: Committed {len(users_to_notify)} in-app notifications")
+
+def create_task_creation_notification(task: Task, created_by: User):
+    """Create in-app notifications for task creation"""
+    users_to_notify = {task.owner} | set(task.collaborators or [])
+    users_to_notify = {user for user in users_to_notify if user.id != created_by.id}
+
+    print(f"DEBUG: Creating task creation notification for task: {task.title}")
+    print(f"DEBUG: Created by: {created_by.email}")
+    print(f"DEBUG: Users to notify: {[u.email for u in users_to_notify]}")
+
+    payload = {
+        "project_name": task.project.name if task.project else "No Project",
+        "task_title": task.title,
+        "description": task.description,
+        "duedate": task.duedate.isoformat() if task.duedate else None,
+        "created_by": created_by.email
+    }
+
+    for user in users_to_notify:
+        notif = Notification(
+            user_id=user.id,
+            task_id=task.id,
+            payload=payload,
+            type=NotificationType.TASK_CREATED
+        )
+        db.session.add(notif)
+        print(f"DEBUG: Added task creation notification for user: {user.email}")
+    
+    try:
+        db.session.commit()
+        print(f"DEBUG: Committed {len(users_to_notify)} task creation notifications")
+    except Exception as e:
+        db.session.rollback()
+        print(f"DEBUG: Failed to create task creation notifications: {e}")
 
 def create_task_assignment_notification(task: Task, assigned_by: User, assignee: User):
     """Create notification when task is assigned to someone"""
@@ -313,6 +348,14 @@ def create_notification_payload(notification_type: NotificationType, **kwargs):
             "task_title": kwargs.get("task_title", "Untitled Task"),
             "updated_fields": kwargs.get("updated_fields", []),
             "updated_by": kwargs.get("updated_by")
+        })
+    elif notification_type == NotificationType.TASK_CREATED:  # Added
+        base_payload.update({
+            "project_name": kwargs.get("project_name", "No Project"),
+            "task_title": kwargs.get("task_title", "Untitled Task"),
+            "created_by": kwargs.get("created_by"),
+            "description": kwargs.get("description"),
+            "duedate": kwargs.get("duedate").isoformat() if kwargs.get("duedate") else None,
         })
     
     return base_payload

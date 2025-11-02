@@ -12,6 +12,7 @@ from app.services.notification_services import (
     create_comment_notification,
     create_task_update_notification,
     create_task_assignment_notification,
+    create_task_creation_notification  # Added
 )
 from flask_jwt_extended import get_jwt_identity
 from app.services.email_services import send_task_assignment_email_notification
@@ -39,6 +40,9 @@ class _NotificationFacade:
 
     def create_task_assignment_notification(self, *args, **kwargs):
         return create_task_assignment_notification(*args, **kwargs)
+
+    def create_task_creation_notification(self, *args, **kwargs):  # Added
+        return create_task_creation_notification(*args, **kwargs)
 
 
 notification_service = _NotificationFacade()
@@ -87,6 +91,12 @@ def create_task(title, description, duedate, status, owner_email, collaborator_e
                 send_task_creation_email_notification(task, current_user)
             except Exception as e:
                 print(f"DEBUG: Error sending task creation email: {e}")
+            
+            # Create in-app task creation notification
+            try:
+                notification_service.create_task_creation_notification(task, current_user)
+            except Exception as e:
+                print(f"DEBUG: Error creating task creation notification: {e}")
             
             # Also send individual assignment notifications
             if current_user.id != owner.id:
@@ -221,19 +231,17 @@ def update_task(task_id, data, new_files):
             })
             task.description = data["description"]
             
-        # Due date change
+        # Due date change - FIXED DATE PARSING (Timezone issue)
         if "duedate" in data and data["duedate"]:
             try:
                 # Parse the date properly with timezone handling
                 date_str = data["duedate"]
+                # Remove timezone 'Z' if present and handle as naive date
+                if date_str.endswith('Z'):
+                    date_str = date_str[:-1]
                 if 'T' in date_str:
-                    # Handle ISO format with timezone
-                    if date_str.endswith('Z'):
-                        # UTC timezone
-                        new_duedate = datetime.fromisoformat(date_str[:-1] + '+00:00').date()
-                    else:
-                        # Already has timezone info
-                        new_duedate = datetime.fromisoformat(date_str).date()
+                    # Parse as datetime and convert to date
+                    new_duedate = datetime.fromisoformat(date_str).date()
                 else:
                     # Simple date string
                     new_duedate = datetime.fromisoformat(date_str).date()
@@ -249,6 +257,7 @@ def update_task(task_id, data, new_files):
                 print(f"Date parsing error: {e}")
                 raise ValueError(f"Invalid date format: {data['duedate']}")
         
+        
         # Status change
         if "status" in data and data["status"]:
             try:
@@ -263,7 +272,7 @@ def update_task(task_id, data, new_files):
                     
                     # Remove notifications if task is completed
                     if new_status == TaskStatus.COMPLETED:
-                        remove_notifications_for_task(task)
+                        notification_service.remove_notifications_for_task(task)
             except ValueError:
                 raise ValueError(f"Invalid status: {data['status']}")
         
@@ -302,7 +311,7 @@ def update_task(task_id, data, new_files):
                 
                 user_id = get_jwt_identity()  
                 current_user = User.query.get(int(user_id))
-                create_task_assignment_notification(task, current_user, owner)
+                notification_service.create_task_assignment_notification(task, current_user, owner)
                 send_task_assignment_email_notification(task, current_user, owner)
                 
                 task.owner = owner
@@ -338,38 +347,10 @@ def update_task(task_id, data, new_files):
                         if email in new_collaborators:
                             user_id = get_jwt_identity()  
                             current_user = User.query.get(int(user_id))
-                            create_task_assignment_notification(task, current_user, user)
+                            notification_service.create_task_assignment_notification(task, current_user, user)
                             send_task_assignment_email_notification(task, current_user, user)
 
-        # Handle attachments
-        if "existing_attachments" in data:
-            existing_attachments = data["existing_attachments"]
-            if isinstance(existing_attachments, str):
-                try:
-                    existing_attachments = json.loads(existing_attachments)
-                except json.JSONDecodeError:
-                    existing_attachments = []
-            
-            existing_ids = [att.get("id") for att in existing_attachments if att.get("id")]
-            for att in task.attachments[:]:
-                if att.id not in existing_ids:
-                    db.session.delete(att)
-
-        if new_files:
-            for file in new_files:
-                attachment = Attachment(
-                    filename=file.filename,
-                    content=file.read(),
-                    task=task
-                )
-                db.session.add(attachment)
-            # Track attachment changes
-            updated_fields.append({
-                "field": "attachments",
-                "old_value": f"{len(task.attachments)} files",
-                "new_value": f"{len(task.attachments) + len(new_files)} files"
-            })
-
+        # Handle attachments - FIXED ATTACHMENT HANDLING
         removed_attachments = []
         if "existing_attachments" in data:
             existing_attachments = data["existing_attachments"]
@@ -381,10 +362,12 @@ def update_task(task_id, data, new_files):
             
             existing_ids = [att.get("id") for att in existing_attachments if att.get("id")]
             
-            # Track removed attachments
+            # Track removed attachments - ensure we get actual filenames
             for att in task.attachments[:]:
                 if att.id not in existing_ids:
-                    removed_attachments.append(att.filename)
+                    # Get the actual filename, not Mock object
+                    filename = getattr(att, 'filename', str(att))
+                    removed_attachments.append(filename)
                     db.session.delete(att)
 
         added_attachments = []
@@ -421,7 +404,7 @@ def update_task(task_id, data, new_files):
         
         # Create in-app notifications for any field changes
         if updated_fields and current_user:
-            create_task_update_notification(task, current_user, updated_fields)
+            notification_service.create_task_update_notification(task, current_user, updated_fields)
             
             # Send email notifications for any field changes (excluding the user who made changes)
             send_task_update_email_notification(task, current_user, updated_fields, current_user.id)
@@ -429,7 +412,7 @@ def update_task(task_id, data, new_files):
         # Update due date notifications if due date changed and task is not completed
         due_date_changed = any(change.get('field') == 'due date' for change in updated_fields)
         if due_date_changed and task.status != TaskStatus.COMPLETED:
-            update_notifications_for_task(task)
+            notification_service.update_notifications_for_task(task)
 
         print(f"DEBUG: Task {task_id} updated successfully with {len(updated_fields)} changes")
         return task

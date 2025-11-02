@@ -32,8 +32,9 @@ class NotificationType(enum.Enum):
     DUE_DATE_REMINDER = "due_date_reminder"
     NEW_COMMENT = "new_comment"
     TASK_UPDATED = "task_updated"
-    PROJECT_CREATED = "project_created"  # Added
-    PROJECT_UPDATED = "project_updated"  # Added
+    TASK_CREATED = "task_created"  # Added
+    PROJECT_CREATED = "project_created"
+    PROJECT_UPDATED = "project_updated"
 
 # association tables
 task_collaborators = db.Table(
@@ -264,6 +265,14 @@ class Notification(db.Model):
                 "updated_fields": kwargs.get("updated_fields"),  
                 "updated_by": kwargs.get("updated_by"),
             }
+        elif notification_type == NotificationType.TASK_CREATED:  # Added
+            return {
+                "project_name": kwargs.get("project_name"),
+                "task_title": kwargs.get("task_title"),
+                "created_by": kwargs.get("created_by"),
+                "description": kwargs.get("description"),
+                "duedate": kwargs.get("duedate"),
+            }
         elif notification_type == NotificationType.PROJECT_CREATED:
             return {
                 "project_name": kwargs.get("project_name"),
@@ -308,6 +317,11 @@ class Notification(db.Model):
                 changes.append(f"{field} from {old_val} to {new_val}")
             changes_str = ', '.join(changes)
             return f"{updated_by} updated '{tt}' in {pn}: {changes_str}"
+        elif self.type == NotificationType.TASK_CREATED:  # Added
+            pn = p.get("project_name", "Project")
+            tt = p.get("task_title", "Task")
+            created_by = p.get("created_by", "Someone")
+            return f"New task '{tt}' created by {created_by} in {pn}"
         elif self.type == NotificationType.PROJECT_CREATED:
             project_name = p.get("project_name", "Project")
             created_by = p.get("created_by", "Someone")

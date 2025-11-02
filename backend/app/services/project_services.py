@@ -1,5 +1,4 @@
 import json
-# --- Imports are correct ---
 from app.models import db, Project, Attachment, User, ProjectStatus, Task, TaskStatus
 from app.services.user_services import get_user_by_email
 from sqlalchemy.exc import SQLAlchemyError
@@ -11,7 +10,7 @@ from app.services.email_services import (
     send_project_collaborator_added_email_notification
 )
 
-def create_project(name, description, deadline, status, owner_email, collaborator_emails, attachments, notes):
+def create_project(name, description, deadline, status, owner_email, collaborator_emails, attachments, notes, current_user_id=None):
     try:
         owner = get_user_by_email(owner_email)
         if not owner:
@@ -51,23 +50,18 @@ def create_project(name, description, deadline, status, owner_email, collaborato
 
         db.session.commit()
         
-        # Get current user for notifications
-        from flask_jwt_extended import get_jwt_identity
-        current_user_id = get_jwt_identity()
-        current_user = User.query.get(int(current_user_id))
-        
-        # Send project creation email notification
-        if current_user:
-            send_project_creation_email_notification(project, current_user)
-            # Create in-app notifications
-            from app.services.notification_services import create_project_creation_notification
-            create_project_creation_notification(project, current_user)
+        # Use provided current_user_id instead of get_jwt_identity()
+        if current_user_id:
+            current_user = User.query.get(int(current_user_id))
+            
+            # Send project creation email notification
+            if current_user:
+                send_project_creation_email_notification(project, current_user)
+                # Create in-app notifications
+                from app.services.notification_services import create_project_creation_notification
+                create_project_creation_notification(project, current_user)
         
         return project
-    
-    except SQLAlchemyError as e:
-        db.session.rollback()
-        raise RuntimeError(f"Database error while creating project: {e}")
     
     except SQLAlchemyError as e:
         db.session.rollback()
@@ -109,7 +103,7 @@ def get_project_users(project_id):
     except SQLAlchemyError as e:
         raise RuntimeError(f"Database error while fetching project {project_id}: {e}")
 
-def update_project(project_id, data, new_files, collaborator_emails=None):
+def update_project(project_id, data, new_files, collaborator_emails=None, current_user_id=None):
     try:
         project = Project.query.get(project_id)
         if not project:
@@ -144,11 +138,11 @@ def update_project(project_id, data, new_files, collaborator_emails=None):
         if "deadline" in data and data["deadline"]:
             try:
                 date_str = data["deadline"]
+                # Remove timezone 'Z' if present and handle as naive date (Fix timezone issue)
+                if date_str.endswith('Z'):
+                    date_str = date_str[:-1]
                 if 'T' in date_str:
-                    if date_str.endswith('Z'):
-                        new_deadline = datetime.fromisoformat(date_str[:-1] + '+00:00').date()
-                    else:
-                        new_deadline = datetime.fromisoformat(date_str).date()
+                    new_deadline = datetime.fromisoformat(date_str).date()
                 else:
                     new_deadline = datetime.fromisoformat(date_str).date()
             
@@ -221,20 +215,22 @@ def update_project(project_id, data, new_files, collaborator_emails=None):
 
         db.session.commit()
         
-        # Get current user for email notification
-        from flask_jwt_extended import get_jwt_identity
-        current_user_id = get_jwt_identity()
-        current_user = User.query.get(int(current_user_id))
-        
-        # Send email notifications
-        if current_user:
-            # Send general project update notification if there were changes
-            if changes:
-                send_project_update_email_notification(project, current_user, changes)
+        # Use provided current_user_id instead of get_jwt_identity()
+        if current_user_id:
+            current_user = User.query.get(int(current_user_id))
             
-            # Send specific notification for new collaborators
-            if new_collaborators:
-                send_project_collaborator_added_email_notification(project, current_user, new_collaborators)
+            # Send email notifications
+            if current_user:
+                # Send general project update notification if there were changes
+                if changes:
+                    send_project_update_email_notification(project, current_user, changes)
+                    # ALSO CREATE IN-APP NOTIFICATIONS FOR PROJECT UPDATES
+                    from app.services.notification_services import create_project_update_notification
+                    create_project_update_notification(project, current_user, changes)
+                
+                # Send specific notification for new collaborators
+                if new_collaborators:
+                    send_project_collaborator_added_email_notification(project, current_user, new_collaborators)
         
         return project
     
@@ -242,9 +238,6 @@ def update_project(project_id, data, new_files, collaborator_emails=None):
         db.session.rollback()
         raise e
 
-# ------------------------------------
-# THIS IS THE FUNCTION THE SERVER CAN'T FIND
-# ------------------------------------
 def get_project_report_data(project_id, user_id):
     try:
         project = Project.query.get(project_id)
