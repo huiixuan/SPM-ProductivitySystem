@@ -57,7 +57,9 @@ const formSchema = z.object({
   owner: z.string().min(1, "Task owner is required."),
   collaborators: z.array(z.string()).optional(),
   notes: z.string().optional(),
-  attachments: z.array(attachmentSchema)
+  attachments: z.array(attachmentSchema),
+  recurrence: z.enum(["none", "daily", "weekly", "monthly", "custom"]),
+	customInterval: z.number().optional().refine((val) => val === undefined || val > 0, {message: "Custom interval must be greater than 0"})
 })
 type TaskFormData = z.infer<typeof formSchema>
 
@@ -80,7 +82,9 @@ interface Task {
   attachments?: {
     id: number,
     filename: string
-  }[]
+  }[],
+  recurrence_type: string,
+  recurrence_interval: number
 }
 
 interface UserData {
@@ -105,8 +109,19 @@ export default function UpdateTaskDialog({
 }: UpdateTaskDialogProps) {
   const statuses = ["Unassigned", "Ongoing", "Pending Review", "Completed"]
   const priorities = Array.from({ length: 10 }, (_, i) => i + 1)
+  const recurrenceOptions = [
+    { label: "None", value: "none" },
+    { label: "Daily", value: "daily" },
+    { label: "Weekly", value: "weekly" },
+    { label: "Monthly", value: "monthly" },
+    { label: "Custom (e.g., every X days)", value: "custom" },
+  ]
 
   const token = localStorage.getItem("token")
+
+  const recurrenceValue = ["none","daily","weekly","monthly","custom"].includes(task.recurrence_type?.toLowerCase() || "")
+  ? (task.recurrence_type?.toLowerCase() as TaskFormData["recurrence"])
+  : "none";
 
   const form = useForm<TaskFormData>({
     resolver: zodResolver(formSchema),
@@ -120,7 +135,9 @@ export default function UpdateTaskDialog({
       owner: task.owner_email,
       collaborators: task.collaborators?.map(c => c.email) || [],
       notes: task.notes || "",
-      attachments: task.attachments || []
+      attachments: task.attachments || [],
+      recurrence: recurrenceValue,
+      customInterval: task.recurrence_interval || undefined
     }
   })
 
@@ -164,6 +181,11 @@ export default function UpdateTaskDialog({
       newFiles.forEach(file => {
         formData.append("attachments", file)
       })
+
+      formData.append("recurrence", values.recurrence)
+      if (values.recurrence === "custom" && values.customInterval) {
+        formData.append("custom_interval", values.customInterval.toString())
+      }
 
       console.log("Submitting form data:", Object.fromEntries(formData))
 
@@ -260,7 +282,6 @@ export default function UpdateTaskDialog({
                         <div>
                           {task.duedate}
                         </div>
-                        
                       )}
                     </FormControl>
                   </FormItem>
@@ -296,7 +317,7 @@ export default function UpdateTaskDialog({
               
               <div className="flex flex-row gap-2">
                 <FormField control={form.control} name="priority" render={({ field, fieldState }) => (
-                  <FormItem className="w-1/2">
+                  <FormItem className={`${form.watch("recurrence") === "custom" ? "w-1/3" : "w-1/2"}`}>
                     <FormLabel>Priority</FormLabel>
                     <FormControl>
                       {isOwner? (
@@ -321,7 +342,53 @@ export default function UpdateTaskDialog({
                     )}
                   </FormItem>
                 )} />
-
+                <FormField
+									control={form.control} name="recurrence" render={({ field }) => (
+										<FormItem className={`${form.watch("recurrence") === "custom" ? "w-1/3" : "w-1/2"}`}>
+											<FormLabel>Recurrence</FormLabel>
+											<FormControl>
+												<Select value={field.value} onValueChange={field.onChange}>
+													<SelectTrigger className="w-full">
+														<SelectValue placeholder="Select recurrence" />
+													</SelectTrigger>
+													<SelectContent>
+														{recurrenceOptions.map((opt) => (
+															<SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+														))}
+													</SelectContent>
+												</Select>
+											</FormControl>
+										</FormItem>
+									)}
+								/>
+                {form.watch("recurrence") === "custom" && (
+									<FormField
+										control={form.control}
+										name="customInterval"
+										render={({ field, fieldState }) => (
+											<FormItem className="w-1/3">
+												<FormLabel>Repeat every (days)</FormLabel>
+												<FormControl>
+													<Input
+														type="number"
+														min={1}
+														className="w-full"
+														{...field}
+														onChange={(e) => field.onChange(e.target.value ? parseInt(e.target.value, 10) : undefined)}
+													/>
+												</FormControl>
+												{fieldState.error && (
+													<p className="text-red-700">
+														{fieldState.error.message}
+													</p>
+												)}
+											</FormItem>
+										)}
+									/>
+								)}
+              </div>
+              
+              <div className="flex flex-row gap-2">
                 <FormField control={form.control} name="owner" render={({ field, fieldState }) => (
                   <FormItem className="w-1/2">
                     <FormLabel>Task Owner</FormLabel>
@@ -340,28 +407,27 @@ export default function UpdateTaskDialog({
                     )}
                   </FormItem>
                 )} />
+                <FormField control={form.control} name="collaborators" render={({ field }) => (
+                  <FormItem className="w-1/2">
+                    <FormLabel>Collaborators</FormLabel>
+                    <FormControl>
+                      {isOwner ? (
+                        <EmailCombobox value={field.value as string[]} onChange={field.onChange} placeholder="Select Collaborators..." currentUserData={currentUserData} multiple />
+                      ) : (
+                        <div>
+                          {task.collaborators?.length ? (
+                            task.collaborators.map((c) => (
+                              <span key={c.id}>{c.email}</span>
+                            ))
+                          ) : (
+                            <span className="text-gray-500 italic">No collaborators</span>
+                          )}
+                        </div>
+                      )}
+                    </FormControl>
+                  </FormItem>
+                )} />
               </div>
-
-              <FormField control={form.control} name="collaborators" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Collaborators</FormLabel>
-                  <FormControl>
-                    {isOwner ? (
-                      <EmailCombobox value={field.value as string[]} onChange={field.onChange} placeholder="Select Collaborators..." currentUserData={currentUserData} multiple />
-                    ) : (
-                      <div>
-                        {task.collaborators?.length ? (
-                          task.collaborators.map((c) => (
-                            <span key={c.id}>{c.email}</span>
-                          ))
-                        ) : (
-                          <span className="text-gray-500 italic">No collaborators</span>
-                        )}
-                      </div>
-                    )}
-                  </FormControl>
-                </FormItem>
-              )} />
 
               <FormField control={form.control} name="notes" render={({ field }) => (
                 <FormItem>

@@ -30,13 +30,14 @@ def create_task_route():
         notes = data.get("notes")
         priority = data.get("priority")
         
-        # 1. Get the optional project_id from the form data
         project_id = data.get("project_id")
 
         status_enum = TaskStatus(status)
         duedate = datetime.fromisoformat(duedate_str).date() if duedate_str else None
 
-        # 2. Pass the new 'project_id' argument to the service function
+        recurrence = data.get("recurrence")
+        custom_interval = data.get("custom_interval")
+
         task = task_services.create_task(
             title=title,
             description=description,
@@ -47,7 +48,9 @@ def create_task_route():
             attachments=files,
             notes=notes,
             priority=priority,
-            project_id=project_id # <-- This is the new argument
+            project_id=project_id,
+            recurrence=recurrence,
+            customInterval=custom_interval
         )
 
         return jsonify({
@@ -168,36 +171,3 @@ def update_task_route(task_id):
     
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
-
-@task_bp.route("", methods=["GET"])
-@jwt_required()
-def get_user_tasks():
-    """Get all tasks for the current user"""
-    try:
-        user_id_str = get_jwt_identity()
-        user_id = int(user_id_str)
-        user = db.session.get(User, user_id)
-        
-        if not user:
-            return jsonify({"error": "User not found"}), 404
-
-        user_tasks = Task.query.filter(Task.owner_id == user_id).all()
-        
-        tasks_list = []
-        for task in user_tasks:
-            task_data = {
-                "id": task.id,
-                "title": task.title,
-                "description": task.description,
-                "duedate": task.duedate.isoformat() if task.duedate else None,
-                "status": task.status.value,
-                "owner_id": task.owner_id,
-                "created_at": task.created_at.isoformat() if task.created_at else None,
-                "notes": task.notes
-            }
-            tasks_list.append(task_data)
-
-        return jsonify({"tasks": tasks_list}), 200
-
-    except Exception as e:
-        return jsonify({"error": f"An unexpected server error occurred: {e}"}), 500

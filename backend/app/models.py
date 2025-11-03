@@ -4,9 +4,8 @@ from sqlalchemy.orm import relationship
 from werkzeug.security import generate_password_hash, check_password_hash
 import enum
 from sqlalchemy.dialects.postgresql import JSONB
-from datetime import datetime, date
+from datetime import datetime
 from sqlalchemy import UniqueConstraint, Index
-from sqlalchemy.dialects.postgresql import ENUM
 
 db = SQLAlchemy()
 
@@ -31,6 +30,13 @@ class NotificationType(enum.Enum):
     DUE_DATE_REMINDER = "due_date_reminder"
     NEW_COMMENT = "new_comment"
     TASK_UPDATED = "task_updated"
+
+class RecurrenceType(enum.Enum):
+    NONE = "none"
+    DAILY = "daily"
+    WEEKLY = "weekly"
+    MONTHLY = "monthly"
+    CUSTOM = "custom"
 
 # association tables
 task_collaborators = db.Table(
@@ -100,6 +106,10 @@ class Task(db.Model):
     project_id = db.Column(db.Integer, db.ForeignKey("projects.id"), nullable=True)
     priority = db.Column(db.Integer, nullable=False, server_default='1', default=1)
 
+    isRecurring = db.Column(db.Boolean, default=False, nullable=False)
+    recurrence_type = db.Column(db.Enum(RecurrenceType, native_enum=False), default=RecurrenceType.NONE, nullable=False)
+    recurrence_interval = db.Column(db.Integer, nullable=True)
+
     owner = relationship("User", back_populates="owned_tasks")
     project = relationship("Project", back_populates="project_tasks")
     
@@ -142,7 +152,10 @@ class Task(db.Model):
             "attachments": [
                 {"id": att.id, "filename": att.filename}
                 for att in self.attachments
-            ]
+            ],
+            "is_recurring": self.isRecurring,
+            "recurrence_type": self.recurrence_type.value if self.recurrence_type else None,
+            "recurrence_interval": self.recurrence_interval
         }
     
 class Attachment(db.Model):
