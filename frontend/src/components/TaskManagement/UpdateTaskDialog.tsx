@@ -120,8 +120,8 @@ export default function UpdateTaskDialog({
   const token = localStorage.getItem("token")
 
   const recurrenceValue = ["none","daily","weekly","monthly","custom"].includes(task.recurrence_type?.toLowerCase() || "")
-  ? (task.recurrence_type?.toLowerCase() as TaskFormData["recurrence"])
-  : "none";
+  ? task.recurrence_type!.toLowerCase() as TaskFormData["recurrence"]
+  : "none"
 
   const form = useForm<TaskFormData>({
     resolver: zodResolver(formSchema),
@@ -151,7 +151,9 @@ export default function UpdateTaskDialog({
       owner: task.owner_email,
       collaborators: task.collaborators?.map(c => c.email) || [],
       notes: task.notes || "",
-      attachments: task.attachments || []
+      attachments: task.attachments || [],
+      recurrence: recurrenceValue, 
+      customInterval: task.recurrence_interval || undefined
     })
   }, [task, form])
 
