@@ -9,7 +9,6 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-// --- Cleaned up imports ---
 import { ArrowLeft, Edit, Plus, Link as LinkIcon, BarChart } from "lucide-react"; 
 import ProjectReportDialog from "@/components/ProjectManagement/ProjectReportDialog"; 
 
@@ -34,8 +33,6 @@ export default function ProjectDetailPage() {
   const [isCreateTaskOpen, setIsCreateTaskOpen] = useState(false);
   const [isAddTaskOpen, setIsAddTaskOpen] = useState(false);
   const [refreshTasksKey, setRefreshTasksKey] = useState(0); 
-
-  // --- New state for Report Dialog ---
   const [isReportOpen, setIsReportOpen] = useState(false);
 
   const navigate = useNavigate();
@@ -70,7 +67,6 @@ export default function ProjectDetailPage() {
     setRefreshTasksKey(prev => prev + 1);
   };
   
-
   const handleUpdateSuccess = (updatedProject: Project) => {
     setProject(updatedProject);
     setIsEditDialogOpen(false);
@@ -85,7 +81,6 @@ export default function ProjectDetailPage() {
         <ArrowLeft className="mr-2 h-4 w-4" /> Back to Projects
       </Button>
 
-
       <div className="flex flex-wrap justify-between items-start gap-4">
         <div>
           <h1 className="text-3xl font-bold">{project.name}</h1>
@@ -99,18 +94,14 @@ export default function ProjectDetailPage() {
             <Button variant="outline" onClick={() => setIsAddTaskOpen(true)}>
                 <LinkIcon className="mr-2 h-4 w-4" /> Add Existing Task
             </Button>
-            
-            {/* --- New Report Button --- */}
             <Button variant="outline" onClick={() => setIsReportOpen(true)}>
                 <BarChart className="mr-2 h-4 w-4" /> Generate Report
             </Button>
-
             <Button variant="outline" onClick={() => setIsEditDialogOpen(true)}>
                 <Edit className="mr-2 h-4 w-4" /> Edit Project
             </Button>
         </div>
       </div>
-
 
       <div className="mt-6 grid gap-4 md:grid-cols-2">
         <div>
@@ -125,10 +116,8 @@ export default function ProjectDetailPage() {
       
       <Separator className="my-8" />
       
-
       <h2 className="text-2xl font-bold mb-4">Project Tasks</h2>
       <TaskDashboard project={true} project_id={project.id} refreshKey={refreshTasksKey} />
-
 
       {userData && (
           <>
@@ -138,12 +127,13 @@ export default function ProjectDetailPage() {
 
             <AddExistingTaskDialog isOpen={isAddTaskOpen} setIsOpen={setIsAddTaskOpen} projectId={project.id} onTaskLinked={handleTaskChange} />
 
-            {/* --- Render the new Report Dialog --- */}
+            {/* This passes the status to the modal */}
             <ProjectReportDialog 
               isOpen={isReportOpen} 
               setIsOpen={setIsReportOpen} 
               projectId={project.id} 
               projectName={project.name} 
+              projectStatus={project.status}
             />
           </>
       )}
