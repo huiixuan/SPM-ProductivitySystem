@@ -1,4 +1,4 @@
-from flask_sqlalchemy import SQLAlchemy
+﻿from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -165,7 +165,8 @@ class Attachment(db.Model):
     filename = db.Column(db.String(255), nullable=False)
     content = db.Column(db.LargeBinary, nullable=False)
 
-    task_id = db.Column(db.Integer, db.ForeignKey("tasks.id"), nullable=False)
+
+    task_id = db.Column(db.Integer, db.ForeignKey("tasks.id"), nullable=True) 
     task = relationship("Task", back_populates="attachments")
     
     project_id = db.Column(db.Integer, db.ForeignKey("projects.id"))
@@ -271,28 +272,85 @@ class Notification(db.Model):
     @property
     def message(self):
         p = self.payload or {}
-        if self.type == NotificationType.DUE_DATE_REMINDER:
+        notification_type = p.get("notification_type", "")
+    
+        if self.type == NotificationType.DUE_DATE_REMINDER or notification_type == "due_date_reminder":
             pn = p.get("project_name", "Project")
             tt = p.get("task_title", "Task")
-            dd = p.get("duedate", "")
-            return f"{pn}: '{tt}' is due on {dd} (in {self.trigger_days_before} day(s))."
+            actual_days = p.get("actual_days_until_due", 0)
+        
+            if actual_days == 0:
+                return f"📅 {pn}: '{tt}' is due today!"
+            elif actual_days == 1:
+                return f"📅 {pn}: '{tt}' is due tomorrow!"
+            else:
+                return f"📅 {pn}: '{tt}' is due in {actual_days} days."
+    
+        elif self.type == NotificationType.TASK_UPDATED:
+            pn = p.get("project_name", "Project")
+            tt = p.get("task_title", "Task")
+        
+            if notification_type == "task_creation":
+                created_by = p.get("created_by", "Someone")
+                return f"🆕 {created_by} created new task: '{tt}' in {pn}"
+        
+            elif notification_type == "task_updated":
+                updated_by = p.get("updated_by", "Someone")
+                fields = p.get("updated_fields", [])
+            
+                if fields:
+                    changes = []
+                    for change in fields:
+                        field = change.get('field', '').replace('_', ' ').title()
+                        old_val = change.get('old_value', 'None')
+                        new_val = change.get('new_value', 'None')
+                    
+                        # Format specific fields better
+                        if field.lower() == 'due date':
+                            changes.append(f"📅 Due date changed from {old_val} to {new_val}")
+                        elif field.lower() == 'priority':
+                            changes.append(f"⚡ Priority changed from {old_val} to {new_val}")
+                        elif field.lower() == 'status':
+                            changes.append(f"🔄 Status changed from {old_val} to {new_val}")
+                        elif field.lower() == 'assignee':
+                            changes.append(f"👤 Assignee changed from {old_val} to {new_val}")
+                        elif field.lower() == 'collaborators':
+                            changes.append(f"👥 Collaborators updated")
+                        elif field.lower() == 'attachment':
+                            if new_val == "Removed":
+                                changes.append(f"📎 Removed file: {old_val}")
+                            elif old_val == "None":
+                                changes.append(f"📎 Added file: {new_val}")
+                            else:
+                                changes.append(f"📎 File changed from {old_val} to {new_val}")
+                        else:
+                            changes.append(f"{field} changed from {old_val} to {new_val}")
+                
+                    changes_str = ', '.join(changes)
+                    return f"✏️ {updated_by} updated '{tt}': {changes_str}"
+                else:
+                    return f"✏️ {updated_by} updated '{tt}' in {pn}"
+        
+            # Fallback for old task update format
+            updated_by = p.get("updated_by", "Someone")
+            fields = p.get("updated_fields", [])
+            if fields:
+                changes = []
+                for change in fields:
+                    field = change.get('field', '').replace('_', ' ').title()
+                    old_val = change.get('old_value', 'None')
+                    new_val = change.get('new_value', 'None')
+                    changes.append(f"{field} from {old_val} to {new_val}")
+                changes_str = ', '.join(changes)
+                return f"✏️ {updated_by} updated '{tt}' in {pn}: {changes_str}"
+            else:
+                return f"✏️ {updated_by} updated '{tt}' in {pn}"
+    
         elif self.type == NotificationType.NEW_COMMENT:
             pn = p.get("project_name", "Project")
             tt = p.get("task_title", "Task")
             author = p.get("comment_author", "Someone")
             excerpt = p.get("comment_excerpt", "")
-            return f"{author} commented on '{tt}' in {pn}: {excerpt}"
-        elif self.type == NotificationType.TASK_UPDATED:
-            pn = p.get("project_name", "Project")
-            tt = p.get("task_title", "Task")
-            updated_by = p.get("updated_by", "Someone")
-            fields = p.get("updated_fields", [])
-            changes = []
-            for change in fields:
-                field = change.get('field', '')
-                old_val = change.get('old_value', '')
-                new_val = change.get('new_value', '')
-                changes.append(f"{field} from {old_val} to {new_val}")
-            changes_str = ', '.join(changes)
-            return f"{updated_by} updated '{tt}' in {pn}: {changes_str}"
-        return "New notification"
+            return f"💬 {author} commented on '{tt}' in {pn}: {excerpt}"
+    
+        return "🔔 New notification"

@@ -1,10 +1,10 @@
 import json
 from datetime import timedelta
+from flask import request
 from dateutil.relativedelta import relativedelta
-from app.models import db, Task, Attachment, User, Project, RecurrenceType
+from app.models import db, Task, Attachment, User, Project, RecurrenceType, TaskStatus
 from app.services.user_services import get_user_by_email, get_users_info
 from app.services.project_services import get_project_users
-from app.models import TaskStatus
 from sqlalchemy.exc import SQLAlchemyError
 from datetime import datetime
 from app.services.notification_services import (
@@ -14,9 +14,10 @@ from app.services.notification_services import (
     create_comment_notification,
     create_task_update_notification,
     create_task_assignment_notification,
+    create_notifications_for_recurring_task,
+    send_recurring_task_created_email_notification
 )
 from flask_jwt_extended import get_jwt_identity
-from app.services.email_services import send_task_assignment_email_notification
 from app.services.email_services import (
     send_task_creation_email_notification,
     send_task_assignment_email_notification
@@ -43,6 +44,70 @@ class _NotificationFacade:
 
 
 notification_service = _NotificationFacade()
+
+def create_next_recurring_task(completed_task: Task):
+    """Create the next instance of a recurring task and set up notifications"""
+    if not completed_task.isRecurring:
+        return None
+
+    if not completed_task.recurrence_type or completed_task.recurrence_type == RecurrenceType.NONE:
+        return None
+
+    old_due = completed_task.duedate
+    new_due = old_due
+
+    if completed_task.recurrence_type == RecurrenceType.DAILY:
+        new_due = old_due + timedelta(days=1)
+    elif completed_task.recurrence_type == RecurrenceType.WEEKLY:
+        new_due = old_due + timedelta(weeks=1)
+    elif completed_task.recurrence_type == RecurrenceType.MONTHLY:
+        new_due = old_due + relativedelta(months=1)
+    elif completed_task.recurrence_type == RecurrenceType.CUSTOM:
+        if completed_task.recurrence_interval:
+            new_due = old_due + timedelta(days=completed_task.recurrence_interval)
+        else:
+            raise ValueError("Custom interval is missing for recurring task")
+
+    # Create the next task instance
+    next_task = Task(
+        title=completed_task.title,
+        description=completed_task.description,
+        duedate=new_due,
+        status=TaskStatus.UNASSIGNED,
+        priority=completed_task.priority,
+        owner=completed_task.owner,
+        notes=completed_task.notes,
+        project=completed_task.project,
+        isRecurring=completed_task.isRecurring,
+        recurrence_type=completed_task.recurrence_type,
+        recurrence_interval=completed_task.recurrence_interval,
+    )
+
+    # Copy collaborators
+    for collaborator in completed_task.collaborators:
+        next_task.collaborators.append(collaborator)
+
+    # Copy attachments
+    for attachment in completed_task.attachments:
+        new_attachment = Attachment(
+            filename=attachment.filename,
+            content=attachment.content,
+            task=next_task
+        )
+        db.session.add(new_attachment)
+
+    db.session.add(next_task)
+    db.session.commit()
+
+    # Create notifications for the new recurring task
+    create_notifications_for_recurring_task(next_task, completed_task)
+    
+    # Send email notification about the new recurring task
+    send_recurring_task_created_email_notification(next_task, completed_task)
+
+    print(f"DEBUG: Created next recurring task: {next_task.title} due {next_task.duedate}")
+    
+    return next_task
 
 def create_task(title, description, duedate, status, owner_email, collaborator_emails, attachments, notes, priority, project_id=None, recurrence="none", customInterval=None):
     try:
@@ -76,24 +141,38 @@ def create_task(title, description, duedate, status, owner_email, collaborator_e
         db.session.add(task)
         db.session.commit()
 
-        notification_service.create_notifications_for_task(task)
-
+        # Get current user for notifications
         current_user_id = get_jwt_identity()
         current_user = User.query.get(int(current_user_id))
 
         if current_user:
+            print(f"=== TASK CREATION NOTIFICATION FLOW ===")
             print(f"DEBUG: Current user: {current_user.email}")
             print(f"DEBUG: Task owner: {owner.email}")
             print(f"DEBUG: Collaborators: {[c.email for c in collaborators]}")
             
+            # 1. FIRST: Create task creation notification (this should appear immediately)
+            from app.services.notification_services import create_task_creation_notification
+            print(f"DEBUG: Calling create_task_creation_notification...")
+            create_task_creation_notification(task, current_user)
+            
+            # 2. SECOND: Create due date reminder notifications
+            print(f"DEBUG: Calling create_notifications_for_task (due date reminders)...")
+            notification_service.create_notifications_for_task(task)
+            
+            # 3. THIRD: Send email notifications
+            print(f"DEBUG: Sending email notifications...")
             try:
                 send_task_creation_email_notification(task, current_user)
+                print(f"DEBUG: Task creation email sent successfully")
             except Exception as e:
                 print(f"DEBUG: Error sending task creation email: {e}")
             
+            # Send assignment emails
             if current_user.id != owner.id:
                 try:
                     send_task_assignment_email_notification(task, current_user, owner)
+                    print(f"DEBUG: Owner assignment email sent")
                 except Exception as e:
                     print(f"DEBUG: Error sending owner assignment email: {e}")
             
@@ -101,8 +180,11 @@ def create_task(title, description, duedate, status, owner_email, collaborator_e
                 if collaborator.id != current_user.id:
                     try:
                         send_task_assignment_email_notification(task, current_user, collaborator)
+                        print(f"DEBUG: Collaborator assignment email sent to {collaborator.email}")
                     except Exception as e:
-                        print(f"DEBUG: Error sending collaborator assignment email to {collaborator.email}: {e}")
+                        print(f"DEBUG: Error sending collaborator assignment email: {e}")
+            
+            print(f"=== END TASK CREATION NOTIFICATION FLOW ===")
 
         return task
     
@@ -246,36 +328,41 @@ def update_task(task_id, data, new_files):
     try:
         print(f"Starting update for task {task_id}")
         print(f"Received data: {data}")
-        print(f"Received files: {new_files}")
+        print(f"Received files: {request.files}")
         
         task = Task.query.get(task_id)
         if not task:
             raise ValueError(f"Task with task ID {task_id} not found")
         
+        original_attachments = [{"id": att.id, "filename": att.filename} for att in task.attachments]
+        print(f"DEBUG: Original attachments: {[att['filename'] for att in original_attachments]}")
+        
         old_values = {
             'status': task.status,
             'duedate': task.duedate,
             'priority': task.priority,
-            'owner_id': task.owner_id
+            'owner_id': task.owner_id,
+            'attachments': original_attachments
         }
         
         updated_fields = []
         
+        # Track changes for each field
         if "title" in data and data["title"] != task.title:
-            task.title = data["title"]
             updated_fields.append({
                 "field": "title",
                 "old_value": task.title,
                 "new_value": data["title"]
             })
+            task.title = data["title"]
         
         if "description" in data and data["description"] != task.description:
-            task.description = data["description"]
             updated_fields.append({
                 "field": "description", 
                 "old_value": task.description,
                 "new_value": data["description"]
             })
+            task.description = data["description"]
             
         if "duedate" in data and data["duedate"]:
             try:
@@ -304,7 +391,7 @@ def update_task(task_id, data, new_files):
 
                     if new_status == TaskStatus.COMPLETED:
                         current_user = User.query.get(int(get_jwt_identity()))
-                        create_next_recurring_task(task, current_user.id)
+                        create_next_recurring_task(task, current_user)
                         
             except ValueError:
                 raise ValueError(f"Invalid status: {data['status']}")
@@ -328,12 +415,12 @@ def update_task(task_id, data, new_files):
             task.recurrence_interval = custom_interval if recurrence == "custom" else None
         
         if "notes" in data and data["notes"] != task.notes:
-            task.notes = data["notes"]
             updated_fields.append({
                 "field": "notes",
                 "old_value": task.notes,
                 "new_value": data["notes"]
             })
+            task.notes = data["notes"]
 
         if "owner" in data:
             owner = User.query.filter_by(email=data["owner"]).first()
@@ -386,12 +473,16 @@ def update_task(task_id, data, new_files):
                             user_id = get_jwt_identity()  
                             current_user = User.query.get(int(user_id))
                             create_task_assignment_notification(task, current_user, user)
-                            # Add email notification for new collaborator
                             from app.services.email_services import send_task_assignment_email_notification
                             send_task_assignment_email_notification(task, current_user, user)
 
+        # Handle attachments removal and addition
+        removed_attachments = []
+        
         if "existing_attachments" in data:
             existing_attachments = data["existing_attachments"]
+            print(f"DEBUG: Existing attachments from form: {existing_attachments}")
+            
             if isinstance(existing_attachments, str):
                 try:
                     existing_attachments = json.loads(existing_attachments)
@@ -399,24 +490,49 @@ def update_task(task_id, data, new_files):
                     existing_attachments = []
             
             existing_ids = [att.get("id") for att in existing_attachments if att.get("id")]
+            print(f"DEBUG: Attachment IDs to keep: {existing_ids}")
+            
+            # Find removed attachments
             for att in task.attachments[:]:
                 if att.id not in existing_ids:
+                    removed_attachments.append(att.filename)
                     db.session.delete(att)
+                    print(f"DEBUG: Marked attachment for deletion: {att.filename}")
+
+        # Add new files
+        if new_files:
+            for file in new_files:
+                if file.filename:  # Only process if filename is not empty
+                    attachment = Attachment(
+                        filename=file.filename,
+                        content=file.read(),
+                        task=task
+                    )
+                    db.session.add(attachment)
+                    print(f"DEBUG: Added new attachment: {file.filename}")
+
+        # Track attachment changes in updated_fields
+        if removed_attachments:
+            for filename in removed_attachments:
+                updated_fields.append({
+                    "field": "attachment",
+                    "old_value": filename,
+                    "new_value": "Removed"
+                })
+                print(f"DEBUG: Added removal notification for: {filename}")
 
         if new_files:
             for file in new_files:
-                attachment = Attachment(
-                    filename=file.filename,
-                    content=file.read(),
-                    task=task
-                )
-                db.session.add(attachment)
+                if file.filename:
+                    updated_fields.append({
+                        "field": "attachment", 
+                        "old_value": "None",
+                        "new_value": file.filename
+                    })
+                    print(f"DEBUG: Added addition notification for: {file.filename}")
 
-            updated_fields.append({
-                "field": "attachments",
-                "old_value": f"{len(task.attachments)} files",
-                "new_value": f"{len(task.attachments) + len(new_files)} files"
-            })
+
+
 
         db.session.commit()
 
@@ -424,10 +540,11 @@ def update_task(task_id, data, new_files):
         current_user = User.query.get(int(user_id))
         
         if updated_fields and current_user:
-            create_task_update_notification(task, current_user, updated_fields)
+            print(f"DEBUG: Sending task update notifications for {len(updated_fields)} changes")
+            print(f"DEBUG: Changes: {updated_fields}")
             
-            from app.services.email_services import send_task_update_email_notification
-            send_task_update_email_notification(task, current_user, updated_fields, current_user.id)
+            from app.services.notification_services import send_task_update_notification
+            send_task_update_notification(task, current_user, updated_fields)
 
         due_date_changed = any(change.get('field') == 'due date' for change in updated_fields)
         if due_date_changed:
