@@ -9,7 +9,7 @@ import {
     ArrowLeft,
     Calendar,
     User,
-    FileText,
+    Repeat2,
     AlertTriangle,
     Clock,
     FolderKanban,
@@ -19,6 +19,7 @@ import {
 import UpdateTaskDialog from "@/components/TaskManagement/UpdateTaskDialog";
 import CommentsSection from "@/components/Comments/CommentsSection";
 import { toast } from "sonner";
+import TaskCreation from "@/components/TaskManagement/TaskCreation";
 
 interface Task {
     id: number;
@@ -41,6 +42,8 @@ interface Task {
         id: number;
         filename: string;
     }[];
+    recurrence_type: string;
+    recurrence_interval: number
 }
 
 
@@ -56,34 +59,35 @@ export default function TaskDetailPage() {
 
     const highlightComment = location.state?.highlightComment;
 
+    const fetchTask = async () => {
+        if (!taskId) return;
+
+        setLoading(true);
+        try {
+            const res = await fetch(`/api/task/get-task/${taskId}`, {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+
+            if (!res.ok) throw new Error("Failed to fetch task details.");
+            const data = await res.json();
+            setTask(data);
+        } catch (error) {
+            const message = error instanceof Error ? error.message : "Unknown error occurred";
+            toast.error(message);
+            console.error("Error fetching task:", error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
     useEffect(() => {
-        const fetchTask = async () => {
-            if (!taskId) return;
-
-            setLoading(true);
-            try {
-                const res = await fetch(`/api/task/get-task/${taskId}`, {
-                    headers: { Authorization: `Bearer ${token}` },
-                });
-
-                if (!res.ok) throw new Error("Failed to fetch task details.");
-                const data = await res.json();
-                setTask(data);
-            } catch (error) {
-                const message = error instanceof Error ? error.message : "Unknown error occurred";
-                toast.error(message);
-                console.error("Error fetching task:", error);
-            } finally {
-                setLoading(false);
-            }
-        };
-
         fetchTask();
     }, [taskId, token]);
 
     const handleUpdateSuccess = (updatedTask: Task) => {
         setTask(updatedTask);
         setIsEditDialogOpen(false);
+        fetchTask();
         toast.success("Task updated successfully!");
     };
 
@@ -106,6 +110,17 @@ export default function TaskDetailPage() {
         if (priority <= 6) return "bg-yellow-400";
         return "bg-red-400";
     };
+
+    const getRecurrenceColor = (recurrence: string) => {
+        const recurrenceColors: { [key:string]: string} = {
+            "none": "bg-gray-400",
+            "daily": "bg-blue-400",
+            "weekly": "bg-green-400",
+            "monthly": "bg-yellow-400",
+            "custom": "bg-purple-400"
+        };
+        return recurrenceColors[recurrence] || "bg-gray-400";
+    }
 
     const getDaysUntilDue = (dueDate: string) => {
         const today = new Date();
@@ -195,21 +210,11 @@ export default function TaskDetailPage() {
                     </Button>
                     <h1 className="text-3xl font-bold">Task Details</h1>
                 </div>
-
-                {(isOwner || isCollaborator) && (
-                    <Button
-                        onClick={() => setIsEditDialogOpen(true)}
-                        className="flex items-center gap-2"
-                    >
-                        <Edit className="h-4 w-4" /> Edit Task
-                    </Button>
-                )}
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
                 <div className="lg:col-span-2 space-y-6">
-
                     <Card>
                         <CardHeader>
                             <div className="flex justify-between items-start">
@@ -231,7 +236,7 @@ export default function TaskDetailPage() {
                                         </div>
                                     )}
                                 </div>
-
+                                
                                 {isOverdue && (
                                     <Badge variant="destructive" className="flex items-center gap-1 animate-pulse">
                                         <AlertTriangle className="h-4 w-4" />
@@ -241,7 +246,6 @@ export default function TaskDetailPage() {
                             </div>
                         </CardHeader>
                         <CardContent className="space-y-4">
-
                             {task.description && (
                                 <div>
                                     <h3 className="font-semibold text-lg mb-2">Description</h3>
@@ -251,9 +255,7 @@ export default function TaskDetailPage() {
                                 </div>
                             )}
 
-
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-
                                 <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-md">
                                     <Calendar className={`h-5 w-5 ${isOverdue ? "text-red-500" :
                                             dueDateStatus === "due-today" ? "text-orange-500" :
@@ -296,7 +298,7 @@ export default function TaskDetailPage() {
                                 <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-md">
                                     <Clock className="h-5 w-5 text-gray-500" />
                                     <div>
-                                        <p className="font-medium">Created</p>
+                                        <p className="font-medium">Created on</p>
                                         <p className="text-sm text-gray-600">
                                             {new Date(task.created_at).toLocaleDateString()}
                                         </p>
@@ -304,11 +306,17 @@ export default function TaskDetailPage() {
                                 </div>
 
                                 <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-md">
-                                    <FileText className="h-5 w-5 text-gray-500" />
+                                    <Repeat2 className="h-5 w-5 text-gray-500" />
                                     <div>
-                                        <p className="font-medium">Current Status</p>
-                                        <Badge className={`${getStatusColor(task.status)} text-white`}>
-                                            {task.status}
+                                        <p className="font-medium">Recurring</p>
+                                        <Badge className={`${getRecurrenceColor(task.recurrence_type)} text-white`}>
+                                            {task.recurrence_type 
+                                                ? task.recurrence_type.charAt(0).toUpperCase() + task.recurrence_type.slice(1)
+                                                : "None"
+                                            }
+                                            {task.recurrence_type === "custom" && (
+                                                <span>: {task.recurrence_interval} day(s)</span>
+                                            )}
                                         </Badge>
                                     </div>
                                 </div>
@@ -404,12 +412,15 @@ export default function TaskDetailPage() {
                         </CardHeader>
                         <CardContent className="space-y-3">
                             {(isOwner || isCollaborator) && (
-                                <Button
-                                    onClick={() => setIsEditDialogOpen(true)}
-                                    className="w-full flex items-center gap-2"
-                                >
-                                    <Edit className="h-4 w-4" /> Edit Task
-                                </Button>
+                                <div className="flex flex-col gap-2">
+                                    <Button
+                                        onClick={() => setIsEditDialogOpen(true)}
+                                        className="w-full flex items-center gap-2"
+                                    >
+                                        <Edit className="h-4 w-4" /> Edit Task
+                                    </Button>
+                                    <TaskCreation buttonName="Subtask" currentUserData={ userData } />
+                                </div>
                             )}
 
                             {task.project_id && (
@@ -421,14 +432,6 @@ export default function TaskDetailPage() {
                                     <FolderKanban className="h-4 w-4" /> View Project
                                 </Button>
                             )}
-
-                            <Button
-                                variant="outline"
-                                className="w-full flex items-center gap-2"
-                                onClick={handleBack}
-                            >
-                                <ArrowLeft className="h-4 w-4" /> Back to List
-                            </Button>
                         </CardContent>
                     </Card>
 
@@ -442,23 +445,19 @@ export default function TaskDetailPage() {
                                 <span className="font-medium">#{task.id}</span>
                             </div>
                             <div className="flex justify-between">
-                                <span className="text-gray-500">Created:</span>
-                                <span>{new Date(task.created_at).toLocaleDateString()}</span>
-                            </div>
-                            <div className="flex justify-between">
                                 <span className="text-gray-500">Last Updated:</span>
                                 <span>{new Date(task.created_at).toLocaleDateString()}</span>
                             </div>
                             <Separator />
                             <div className="flex justify-between">
                                 <span className="text-gray-500">Priority:</span>
-                                <Badge className={getPriorityColor(task.priority)}>
-                                    Level {task.priority}
+                                <Badge className={`${getPriorityColor(task.priority)} text-white`}>
+                                    Priority {task.priority}
                                 </Badge>
                             </div>
                             <div className="flex justify-between">
                                 <span className="text-gray-500">Status:</span>
-                                <Badge className={getStatusColor(task.status)}>
+                                <Badge className={`${getStatusColor(task.status)} text-white`}>
                                     {task.status}
                                 </Badge>
                             </div>

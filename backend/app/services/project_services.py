@@ -41,7 +41,12 @@ def create_project(name, description, deadline, status, owner_email, collaborato
 
         if attachments:
             for file in attachments:
-                attachment = Attachment(filename=file.filename, content=file.read(), project=project)
+                # FIX: Only set project_id, task_id remains NULL for project attachments
+                attachment = Attachment(
+                    filename=file.filename, 
+                    content=file.read(), 
+                    project=project  # This sets project_id automatically
+                )
                 db.session.add(attachment)
 
         db.session.add(project)
@@ -105,43 +110,129 @@ def update_project(project_id, data, new_files, collaborator_emails=None):
             raise ValueError(f"Project with ID {project_id} not found.")
 
         # Track changes for notification
-        changes = {}
+        changes = []
         old_collaborators = set(project.collaborators)
         
-        # Update simple fields
+        print(f"DEBUG: Starting project update for: {project.name}")
+        print(f"DEBUG: Received data: {data}")
+        print(f"DEBUG: New files: {[f.filename for f in new_files]}")
+
+        # Update simple fields and track changes
         if "name" in data and data["name"] != project.name:
-            changes["Name"] = (project.name, data["name"])
+            changes.append({
+                "field": "name",
+                "old_value": project.name,
+                "new_value": data["name"]
+            })
             project.name = data["name"]
+            print(f"DEBUG: Name changed: {project.name}")
             
         if "description" in data and data["description"] != project.description:
-            changes["Description"] = (project.description, data["description"])
+            changes.append({
+                "field": "description",
+                "old_value": project.description,
+                "new_value": data["description"]
+            })
             project.description = data["description"]
+            print(f"DEBUG: Description changed")
             
         if "notes" in data and data["notes"] != project.notes:
-            changes["Notes"] = (project.notes, data["notes"])
+            changes.append({
+                "field": "notes", 
+                "old_value": project.notes,
+                "new_value": data["notes"]
+            })
             project.notes = data["notes"]
+            print(f"DEBUG: Notes changed")
             
         if "status" in data and data["status"] != project.status.value:
-            changes["Status"] = (project.status.value, data["status"])
+            changes.append({
+                "field": "status",
+                "old_value": project.status.value,
+                "new_value": data["status"]
+            })
             project.status = ProjectStatus(data["status"])
+            print(f"DEBUG: Status changed: {data['status']}")
             
         if "deadline" in data and data["deadline"]:
             new_deadline = datetime.fromisoformat(data["deadline"].replace("Z", "+00:00")).date()
+            old_deadline_str = project.deadline.strftime('%Y-%m-%d') if project.deadline else 'Not set'
+            new_deadline_str = new_deadline.strftime('%Y-%m-%d')
+            
             if project.deadline != new_deadline:
-                changes["Deadline"] = (
-                    project.deadline.strftime('%Y-%m-%d') if project.deadline else 'Not set',
-                    new_deadline.strftime('%Y-%m-%d')
-                )
+                changes.append({
+                    "field": "deadline",
+                    "old_value": old_deadline_str,
+                    "new_value": new_deadline_str
+                })
                 project.deadline = new_deadline
+                print(f"DEBUG: Deadline changed: {old_deadline_str} -> {new_deadline_str}")
 
         # Update owner
         new_owner = None
         if "owner" in data:
             owner = User.query.filter_by(email=data["owner"]).first()
             if owner and owner.id != project.owner_id:
-                changes["Owner"] = (project.owner.email, owner.email)
+                changes.append({
+                    "field": "owner",
+                    "old_value": project.owner.email,
+                    "new_value": owner.email
+                })
                 project.owner = owner
                 new_owner = owner
+                print(f"DEBUG: Owner changed: {owner.email}")
+
+        # Track attachment changes
+        removed_attachments = []
+        
+        # Handle existing attachments removal
+        if "existing_attachments" in data:
+            existing_attachments = data["existing_attachments"]
+            if isinstance(existing_attachments, str):
+                try:
+                    existing_attachments = json.loads(existing_attachments)
+                except json.JSONDecodeError:
+                    existing_attachments = []
+            
+            existing_ids = [att.get("id") for att in existing_attachments if att.get("id")]
+            print(f"DEBUG: Keeping attachment IDs: {existing_ids}")
+            
+            # Find removed attachments
+            for att in project.attachments[:]:
+                if att.id not in existing_ids:
+                    removed_attachments.append(att.filename)
+                    db.session.delete(att)
+                    print(f"DEBUG: Removing attachment: {att.filename}")
+
+        # Add new files
+        added_attachments = []
+        if new_files:
+            for file in new_files:
+                if file.filename:  # Only process if filename is not empty
+                    # FIX: Only set project_id, task_id remains NULL for project attachments
+                    attachment = Attachment(
+                        filename=file.filename,
+                        content=file.read(),
+                        project_id=project.id  # Only set project_id
+                    )
+                    db.session.add(attachment)
+                    added_attachments.append(file.filename)
+                    print(f"DEBUG: Adding new attachment: {file.filename}")
+
+        # Add attachment changes to the changes list
+        for filename in removed_attachments:
+            changes.append({
+                "field": "attachment",
+                "old_value": filename,
+                "new_value": "Removed"
+            })
+            
+        for filename in added_attachments:
+            changes.append({
+                "field": "attachment",
+                "old_value": "None", 
+                "new_value": filename
+            })
 
         # Track new collaborators
         new_collaborators = []
@@ -157,25 +248,30 @@ def update_project(project_id, data, new_files, collaborator_emails=None):
                     new_collaborators.append(user)
             
             # Update collaborators
+            if current_emails != new_emails:
+                changes.append({
+                    "field": "collaborators",
+                    "old_value": ", ".join(current_emails) if current_emails else "None",
+                    "new_value": ", ".join(new_emails) if new_emails else "None"
+                })
+            
             project.collaborators.clear()
             for email in collaborator_emails:
                 user = User.query.filter_by(email=email).first()
                 if user:
                     project.collaborators.append(user)
 
-        # Update attachments
+        # Update existing attachments (this was causing the error)
         if "existing_attachments" in data:
             existing_attachments = json.loads(data["existing_attachments"])
-            existing_ids = [att.get("id") for att in existing_attachments]
+            existing_ids = [att.get("id") for att in existing_attachments if att.get("id")]
             
             for att in project.attachments[:]:
                 if att.id not in existing_ids:
                     db.session.delete(att)
 
-        if new_files:
-            for file in new_files:
-                attachment = Attachment(filename=file.filename, content=file.read(), project=project)
-                db.session.add(attachment)
+        print(f"DEBUG: Total changes detected: {len(changes)}")
+        print(f"DEBUG: Changes: {changes}")
 
         db.session.commit()
         
@@ -184,19 +280,20 @@ def update_project(project_id, data, new_files, collaborator_emails=None):
         current_user_id = get_jwt_identity()
         current_user = User.query.get(int(current_user_id))
         
-        # Send email notifications
-        if current_user:
-            # Send general project update notification if there were changes
-            if changes:
-                send_project_update_email_notification(project, current_user, changes)
-            
-            # Send specific notification for new collaborators
+        # Send email notifications only if there are changes
+        if changes and current_user:
+            print(f"DEBUG: Sending project update notifications for {len(changes)} changes")
+    
+            # Send email notifications
+            send_project_update_email_notification(project, current_user, changes)
+    
             if new_collaborators:
                 send_project_collaborator_added_email_notification(project, current_user, new_collaborators)
         
         return project
     
     except Exception as e:
+        print(f"ERROR in update_project: {e}")
         db.session.rollback()
         raise e
 
