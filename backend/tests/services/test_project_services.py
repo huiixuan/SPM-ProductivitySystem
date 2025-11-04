@@ -203,7 +203,7 @@ def test_update_project_changes_core_fields_and_collaborators(app_instance):
             updated = update_project(
                 project.id,
                 data,
-                new_files=None,
+                new_files=[],
                 collaborator_emails=[collaborator.email],
             )
 
@@ -226,6 +226,6 @@ def test_update_project_invalid_status_raises_value_error(app_instance):
             update_project(
                 project.id,
                 {"status": "NOT_A_REAL_STATUS"},
-                new_files=None,
+                new_files=[],
                 collaborator_emails=[],
             )
