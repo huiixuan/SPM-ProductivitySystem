@@ -1,8 +1,8 @@
 import json
 from datetime import timedelta
-from flask import request
 from dateutil.relativedelta import relativedelta
 from app.models import db, Task, Attachment, User, Project, RecurrenceType, TaskStatus
+from flask import request
 from app.services.user_services import get_user_by_email, get_users_info
 from app.services.project_services import get_project_users
 from sqlalchemy.exc import SQLAlchemyError
@@ -45,70 +45,6 @@ class _NotificationFacade:
 
 notification_service = _NotificationFacade()
 
-def create_next_recurring_task(completed_task: Task):
-    """Create the next instance of a recurring task and set up notifications"""
-    if not completed_task.isRecurring:
-        return None
-
-    if not completed_task.recurrence_type or completed_task.recurrence_type == RecurrenceType.NONE:
-        return None
-
-    old_due = completed_task.duedate
-    new_due = old_due
-
-    if completed_task.recurrence_type == RecurrenceType.DAILY:
-        new_due = old_due + timedelta(days=1)
-    elif completed_task.recurrence_type == RecurrenceType.WEEKLY:
-        new_due = old_due + timedelta(weeks=1)
-    elif completed_task.recurrence_type == RecurrenceType.MONTHLY:
-        new_due = old_due + relativedelta(months=1)
-    elif completed_task.recurrence_type == RecurrenceType.CUSTOM:
-        if completed_task.recurrence_interval:
-            new_due = old_due + timedelta(days=completed_task.recurrence_interval)
-        else:
-            raise ValueError("Custom interval is missing for recurring task")
-
-    # Create the next task instance
-    next_task = Task(
-        title=completed_task.title,
-        description=completed_task.description,
-        duedate=new_due,
-        status=TaskStatus.UNASSIGNED,
-        priority=completed_task.priority,
-        owner=completed_task.owner,
-        notes=completed_task.notes,
-        project=completed_task.project,
-        isRecurring=completed_task.isRecurring,
-        recurrence_type=completed_task.recurrence_type,
-        recurrence_interval=completed_task.recurrence_interval,
-    )
-
-    # Copy collaborators
-    for collaborator in completed_task.collaborators:
-        next_task.collaborators.append(collaborator)
-
-    # Copy attachments
-    for attachment in completed_task.attachments:
-        new_attachment = Attachment(
-            filename=attachment.filename,
-            content=attachment.content,
-            task=next_task
-        )
-        db.session.add(new_attachment)
-
-    db.session.add(next_task)
-    db.session.commit()
-
-    # Create notifications for the new recurring task
-    create_notifications_for_recurring_task(next_task, completed_task)
-    
-    # Send email notification about the new recurring task
-    send_recurring_task_created_email_notification(next_task, completed_task)
-
-    print(f"DEBUG: Created next recurring task: {next_task.title} due {next_task.duedate}")
-    
-    return next_task
-
 def create_task(title, description, duedate, status, owner_email, collaborator_emails, attachments, notes, priority, project_id=None, recurrence="none", customInterval=None):
     try:
         owner = get_user_by_email(owner_email)
@@ -123,7 +59,7 @@ def create_task(title, description, duedate, status, owner_email, collaborator_e
                     collaborators.append(user)
 
         is_recurring = recurrence != "none"
-        recurrence_type = RecurrenceType(recurrence) if is_recurring else None
+        recurrence_type = RecurrenceType(recurrence) if is_recurring else RecurrenceType("none")
         recurrence_interval = customInterval if recurrence == "custom" else None
 
         task = Task(title=title, description=description, duedate=duedate, status=status, owner=owner, collaborators=collaborators, notes=notes, priority=priority, isRecurring=is_recurring, recurrence_type=recurrence_type, recurrence_interval=recurrence_interval)
@@ -192,35 +128,36 @@ def create_task(title, description, duedate, status, owner_email, collaborator_e
         db.session.rollback()
         raise RuntimeError("Database error while creating task")
 
-def create_next_recurring_task(completed_task: Task, current_user: User):
-    if not completed_task.isRecurring:
-        return None
-
-    if not completed_task.recurrence_type:
+def create_next_recurring_task(completed_task: Task):
+    if not completed_task.isRecurring or not completed_task.recurrence_type:
         return None
 
     old_due = completed_task.duedate
-    new_due = old_due
+    if isinstance(old_due, str):
+        old_due = datetime.fromisoformat(old_due)
 
-    # Normalize recurrence_type to Enum to handle DB/driver variations
-    from app.models import RecurrenceType
-    rt = completed_task.recurrence_type
-    try:
-        rt_enum = rt if isinstance(rt, RecurrenceType) else RecurrenceType(rt)
-    except Exception:
-        rt_enum = None
-
-    if rt_enum == RecurrenceType.DAILY:
+    recurrence_type = completed_task.recurrence_type
+    
+    if recurrence_type == RecurrenceType.DAILY:
         new_due = old_due + timedelta(days=1)
-    elif rt_enum == RecurrenceType.WEEKLY:
+
+    elif recurrence_type == RecurrenceType.WEEKLY:
         new_due = old_due + timedelta(weeks=1)
-    elif rt_enum == RecurrenceType.MONTHLY:
+
+    elif recurrence_type == RecurrenceType.MONTHLY:
         new_due = old_due + relativedelta(months=1)
-    elif rt_enum == RecurrenceType.CUSTOM:
-        if completed_task.recurrence_interval:
+
+    elif recurrence_type == RecurrenceType.CUSTOM:
+        if completed_task.recurrence_interval and completed_task.recurrence_interval > 0:
             new_due = old_due + timedelta(days=completed_task.recurrence_interval)
+
         else:
-            raise ValueError("Custom interval is missing for recurring task")
+            raise ValueError("Custom interval is missing or invalid for recurring task")
+        
+    else:
+        new_due = old_due
+
+    print(f"[DEBUG] Creating next recurring task due on: {new_due}")
 
     next_task = Task(
         title=completed_task.title,
@@ -236,18 +173,19 @@ def create_next_recurring_task(completed_task: Task, current_user: User):
         recurrence_interval=completed_task.recurrence_interval,
     )
 
-    for collaborator in completed_task.collaborators:
-        next_task.collaborators.append(collaborator)
-
-    for attachment in completed_task.attachments:
-        new_attachment = Attachment(
-            filename=attachment.filename,
-            content=attachment.content,
-            task=next_task
-        )
-        db.session.add(new_attachment)
-
     db.session.add(next_task)
+
+    next_task.collaborators = completed_task.collaborators[:] if completed_task.collaborators else []
+
+    if completed_task.attachments:
+        for attachment in completed_task.attachments:
+            new_attachment = Attachment(
+                filename=attachment.filename,
+                content=attachment.content,
+                task=next_task
+            )
+            db.session.add(new_attachment)
+
     db.session.commit()
 
     from app.services.notification_services import create_notifications_for_task
@@ -355,7 +293,6 @@ def update_task(task_id, data, new_files):
         
         updated_fields = []
         
-        # Track changes for each field
         if "title" in data and data["title"] != task.title:
             updated_fields.append({
                 "field": "title",
@@ -398,8 +335,7 @@ def update_task(task_id, data, new_files):
                     task.status = new_status
 
                     if new_status == TaskStatus.COMPLETED:
-                        current_user = User.query.get(int(get_jwt_identity()))
-                        create_next_recurring_task(task, current_user)
+                        create_next_recurring_task(task)
                         
             except ValueError:
                 raise ValueError(f"Invalid status: {data['status']}")
@@ -416,11 +352,11 @@ def update_task(task_id, data, new_files):
 
         if "recurrence" in data:
             recurrence = data.get("recurrence")
-            custom_interval = data.get("customInterval")
+            custom_interval = data.get("custom_interval")
 
             task.isRecurring = recurrence != "none"
-            task.recurrence_type = RecurrenceType(recurrence) if task.isRecurring else None
-            task.recurrence_interval = custom_interval if recurrence == "custom" else None
+            task.recurrence_type = RecurrenceType(recurrence) if task.isRecurring else RecurrenceType("none")
+            task.recurrence_interval = int(custom_interval) if recurrence == "custom" else None
         
         if "notes" in data and data["notes"] != task.notes:
             updated_fields.append({
@@ -484,7 +420,6 @@ def update_task(task_id, data, new_files):
                             from app.services.email_services import send_task_assignment_email_notification
                             send_task_assignment_email_notification(task, current_user, user)
 
-        # Handle attachments removal and addition
         removed_attachments = []
         
         if "existing_attachments" in data:

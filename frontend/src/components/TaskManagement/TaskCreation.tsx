@@ -61,8 +61,17 @@ const formSchema = z.object({
 	notes: z.string().optional(),
 	attachments: z.array(z.instanceof(File)),
 	recurrence: z.enum(["none", "daily", "weekly", "monthly", "custom"]),
-	customInterval: z.number().optional().refine((val) => val === undefined || val > 0, {message: "Custom interval must be greater than 0"})
-});
+	customInterval: z.number().optional()
+})
+.refine((data) => {
+    if (data.recurrence === "custom") {
+      return data.customInterval && data.customInterval > 0
+    }
+    return true
+  }, {
+    message: "Custom interval must be greater than 0",
+    path: ["customInterval"]
+  })
 type TaskFormData = z.infer<typeof formSchema>;
 
 export default function TaskCreation({
@@ -104,7 +113,7 @@ export default function TaskCreation({
 			notes: "",
 			attachments: [] as File[],
 			recurrence: "none",
-			customInterval: undefined
+			customInterval: 0
 		},
 	});
 
@@ -195,7 +204,7 @@ export default function TaskCreation({
 		>
 			{buttonName && (
 				<DialogTrigger asChild>
-					<Button variant="outline">
+					<Button variant="outline" className="w-full">
 						<Plus /> {buttonName}
 					</Button>
 				</DialogTrigger>
@@ -222,7 +231,7 @@ export default function TaskCreation({
 											<Input {...field} />
 										</FormControl>
 										{fieldState.error && (
-											<p className="text-red-700">
+											<p className="text-red-700 text-sm">
 												{fieldState.error.message}
 											</p>
 										)}
@@ -255,7 +264,7 @@ export default function TaskCreation({
 												/>
 											</FormControl>
 											{fieldState.error && (
-												<p className="text-red-700">
+												<p className="text-red-700 text-sm">
 													{fieldState.error.message}
 												</p>
 											)}
@@ -295,7 +304,7 @@ export default function TaskCreation({
 												</Select>
 											</FormControl>
 											{fieldState.error && (
-												<p className="text-red-700">
+												<p className="text-red-700 text-sm">
 													{fieldState.error.message}
 												</p>
 											)}
@@ -335,7 +344,7 @@ export default function TaskCreation({
 												</Select>
 											</FormControl>
 											{fieldState.error && (
-												<p className="text-red-700">
+												<p className="text-red-700 text-sm">
 													{fieldState.error.message}
 												</p>
 											)}
@@ -383,13 +392,13 @@ export default function TaskCreation({
 													<Input
 														type="number"
 														min={1}
+														value={field.value === 0 ? "" : field.value}
 														className="w-full"
-														{...field}
 														onChange={(e) => field.onChange(e.target.value ? parseInt(e.target.value, 10) : undefined)}
 													/>
 												</FormControl>
 												{fieldState.error && (
-													<p className="text-red-700">
+													<p className="text-red-700 text-sm">
 														{fieldState.error.message}
 													</p>
 												)}
@@ -434,7 +443,7 @@ export default function TaskCreation({
 												)}
 											</FormControl>
 											{fieldState.error && (
-												<p className="text-red-700">
+												<p className="text-red-700 text-sm">
 													{fieldState.error.message}
 												</p>
 											)}

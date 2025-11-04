@@ -59,8 +59,17 @@ const formSchema = z.object({
   notes: z.string().optional(),
   attachments: z.array(attachmentSchema),
   recurrence: z.enum(["none", "daily", "weekly", "monthly", "custom"]),
-	customInterval: z.number().optional().refine((val) => val === undefined || val > 0, {message: "Custom interval must be greater than 0"})
+	customInterval: z.number().optional()
 })
+.refine((data) => {
+    if (data.recurrence === "custom") {
+      return data.customInterval && data.customInterval > 0
+    }
+    return true
+  }, {
+    message: "Custom interval must be greater than 0",
+    path: ["customInterval"]
+  })
 type TaskFormData = z.infer<typeof formSchema>
 
 interface Task {
@@ -120,8 +129,8 @@ export default function UpdateTaskDialog({
   const token = localStorage.getItem("token")
 
   const recurrenceValue = ["none","daily","weekly","monthly","custom"].includes(task.recurrence_type?.toLowerCase() || "")
-  ? (task.recurrence_type?.toLowerCase() as TaskFormData["recurrence"])
-  : "none";
+  ? task.recurrence_type!.toLowerCase() as TaskFormData["recurrence"]
+  : "none"
 
   const form = useForm<TaskFormData>({
     resolver: zodResolver(formSchema),
@@ -137,7 +146,7 @@ export default function UpdateTaskDialog({
       notes: task.notes || "",
       attachments: task.attachments || [],
       recurrence: recurrenceValue,
-      customInterval: task.recurrence_interval || undefined
+      customInterval: task.recurrence_interval || 0
     }
   })
 
@@ -151,7 +160,9 @@ export default function UpdateTaskDialog({
       owner: task.owner_email,
       collaborators: task.collaborators?.map(c => c.email) || [],
       notes: task.notes || "",
-      attachments: task.attachments || []
+      attachments: task.attachments || [],
+      recurrence: recurrenceValue, 
+      customInterval: task.recurrence_interval || 0
     })
   }, [task, form])
 
@@ -251,7 +262,7 @@ export default function UpdateTaskDialog({
                   </FormControl>
 
                   {fieldState.error && (
-                    <p className="text-red-700">{fieldState.error.message}</p>
+                    <p className="text-red-700 text-sm">{fieldState.error.message}</p>
                   )}
                 </FormItem>
               )} />
@@ -309,7 +320,7 @@ export default function UpdateTaskDialog({
                     </FormControl>
 
                     {fieldState.error && (
-                      <p className="text-red-700">{fieldState.error.message}</p>
+                      <p className="text-red-700 text-sm">{fieldState.error.message}</p>
                     )}
                   </FormItem>
                 )} />
@@ -338,7 +349,7 @@ export default function UpdateTaskDialog({
                     </FormControl>
 
                     {fieldState.error && (
-                      <p className="text-red-700">{fieldState.error.message}</p>
+                      <p className="text-red-700 text-sm">{fieldState.error.message}</p>
                     )}
                   </FormItem>
                 )} />
@@ -373,12 +384,12 @@ export default function UpdateTaskDialog({
 														type="number"
 														min={1}
 														className="w-full"
-														{...field}
-														onChange={(e) => field.onChange(e.target.value ? parseInt(e.target.value, 10) : undefined)}
+														value={field.value === 0 ? "" : field.value}
+														onChange={(e) => field.onChange(e.target.value ? parseInt(e.target.value, 10) : 0)}
 													/>
 												</FormControl>
 												{fieldState.error && (
-													<p className="text-red-700">
+													<p className="text-red-700 text-sm">
 														{fieldState.error.message}
 													</p>
 												)}
@@ -403,7 +414,7 @@ export default function UpdateTaskDialog({
                     </FormControl>
 
                     {fieldState.error && (
-                      <p className="text-red-700">{fieldState.error.message}</p>
+                      <p className="text-red-700 text-sm">{fieldState.error.message}</p>
                     )}
                   </FormItem>
                 )} />
@@ -450,13 +461,7 @@ export default function UpdateTaskDialog({
                   <FormLabel>Attachments</FormLabel>
                   <FormControl>
                     {(isOwner || isCollaborator) ? (
-                      <div>
-                        {task.attachments?.length ? (
-                          <UploadAttachments value={field.value} onChange={field.onChange} />
-                        ) : (
-                          <span className="text-gray-500 italic">No attachments</span>
-                        )}
-                      </div>
+                      <UploadAttachments value={field.value} onChange={field.onChange} />
                     ) : (
                       <div>
                         {task.attachments?.length ? (
@@ -468,7 +473,6 @@ export default function UpdateTaskDialog({
                         )}
                       </div>
                     )}
-                    
                   </FormControl>
                 </FormItem>
               )} />
