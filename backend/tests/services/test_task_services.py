@@ -611,6 +611,8 @@ class TestUpdateTask:
         mock_task_class.query.get.return_value = mock_task
         # Mock the status to be COMPLETED after update
         mock_task.status = TaskStatus.UNASSIGNED
+        # Set isRecurring to False to avoid triggering create_next_recurring_task
+        mock_task.isRecurring = False
 
         data = {"status": "Completed"}
 

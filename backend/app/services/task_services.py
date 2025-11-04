@@ -202,13 +202,21 @@ def create_next_recurring_task(completed_task: Task, current_user: User):
     old_due = completed_task.duedate
     new_due = old_due
 
-    if completed_task.recurrence_type == "daily":
+    # Normalize recurrence_type to Enum to handle DB/driver variations
+    from app.models import RecurrenceType
+    rt = completed_task.recurrence_type
+    try:
+        rt_enum = rt if isinstance(rt, RecurrenceType) else RecurrenceType(rt)
+    except Exception:
+        rt_enum = None
+
+    if rt_enum == RecurrenceType.DAILY:
         new_due = old_due + timedelta(days=1)
-    elif completed_task.recurrence_type == "weekly":
+    elif rt_enum == RecurrenceType.WEEKLY:
         new_due = old_due + timedelta(weeks=1)
-    elif completed_task.recurrence_type == "monthly":
+    elif rt_enum == RecurrenceType.MONTHLY:
         new_due = old_due + relativedelta(months=1)
-    elif completed_task.recurrence_type == "custom":
+    elif rt_enum == RecurrenceType.CUSTOM:
         if completed_task.recurrence_interval:
             new_due = old_due + timedelta(days=completed_task.recurrence_interval)
         else:

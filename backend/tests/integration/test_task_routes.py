@@ -60,6 +60,7 @@ def test_create_task_success(client, auth_headers):
         "owner": "owner@example.com",
         "priority": "1",
         "collaborators": [],
+        "recurrence": "none",
     }
 
     response = client.post(
