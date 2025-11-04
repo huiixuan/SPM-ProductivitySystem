@@ -1,17 +1,17 @@
 import json
-# --- Imports are correct ---
-from app.models import db, Project, Attachment, User, ProjectStatus, Task, TaskStatus
+from app.models import db, Project, Attachment, User, ProjectStatus, Task, TaskStatus, RecurrenceType
 from app.services.user_services import get_user_by_email
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy import func 
-from datetime import datetime
+from datetime import datetime, timedelta
+from dateutil.relativedelta import relativedelta
 from app.services.email_services import (
     send_project_creation_email_notification,
     send_project_update_email_notification,
     send_project_collaborator_added_email_notification
 )
 
-# ... (all other functions: create_project, get_all_projects, etc. stay the same) ...
+# ... (create_project, get_all_projects, get_project_by_id, get_project_users, update_project functions remain the same) ...
 def create_project(name, description, deadline, status, owner_email, collaborator_emails, attachments, notes):
     try:
         owner = get_user_by_email(owner_email)
@@ -20,7 +20,6 @@ def create_project(name, description, deadline, status, owner_email, collaborato
         
         collaborators = []
         if collaborator_emails:
-            # Handle the case where collaborators might be sent as a single string '[]'
             if isinstance(collaborator_emails, list) and len(collaborator_emails) == 1 and collaborator_emails[0] == '[]':
                 collaborator_emails = []
 
@@ -41,26 +40,17 @@ def create_project(name, description, deadline, status, owner_email, collaborato
 
         if attachments:
             for file in attachments:
-                # FIX: Only set project_id, task_id remains NULL for project attachments
-                attachment = Attachment(
-                    filename=file.filename, 
-                    content=file.read(), 
-                    project=project  # This sets project_id automatically
-                )
+                attachment = Attachment(filename=file.filename, content=file.read(), project=project)
                 db.session.add(attachment)
 
         db.session.add(project)
         db.session.commit()
         
-        # Get current user for email notification
-        from flask_jwt_extended import get_jwt_identity
-        current_user_id = get_jwt_identity()
-        current_user = User.query.get(int(current_user_id))
-        
-        # Send project creation email notification
-        if current_user:
-            send_project_creation_email_notification(project, current_user)
-        
+        # Send notifications
+        send_project_creation_email_notification(project)
+        for user in collaborators:
+            send_project_collaborator_added_email_notification(user.email, project)
+            
         return project
     
     except SQLAlchemyError as e:
@@ -109,186 +99,46 @@ def update_project(project_id, data, new_files, collaborator_emails=None):
         if not project:
             raise ValueError(f"Project with ID {project_id} not found.")
 
-        # Track changes for notification
-        changes = []
-        old_collaborators = set(project.collaborators)
+        old_collaborator_emails = {user.email for user in project.collaborators}
         
-        print(f"DEBUG: Starting project update for: {project.name}")
-        print(f"DEBUG: Received data: {data}")
-        print(f"DEBUG: New files: {[f.filename for f in new_files]}")
-
-        # Update simple fields and track changes
-        if "name" in data and data["name"] != project.name:
-            changes.append({
-                "field": "name",
-                "old_value": project.name,
-                "new_value": data["name"]
-            })
-            project.name = data["name"]
-            print(f"DEBUG: Name changed: {project.name}")
-            
-        if "description" in data and data["description"] != project.description:
-            changes.append({
-                "field": "description",
-                "old_value": project.description,
-                "new_value": data["description"]
-            })
-            project.description = data["description"]
-            print(f"DEBUG: Description changed")
-            
-        if "notes" in data and data["notes"] != project.notes:
-            changes.append({
-                "field": "notes", 
-                "old_value": project.notes,
-                "new_value": data["notes"]
-            })
-            project.notes = data["notes"]
-            print(f"DEBUG: Notes changed")
-            
-        if "status" in data and data["status"] != project.status.value:
-            changes.append({
-                "field": "status",
-                "old_value": project.status.value,
-                "new_value": data["status"]
-            })
-            project.status = ProjectStatus(data["status"])
-            print(f"DEBUG: Status changed: {data['status']}")
-            
+        if "name" in data: project.name = data["name"]
+        if "description" in data: project.description = data["description"]
+        if "notes" in data: project.notes = data["notes"]
+        if "status" in data: project.status = ProjectStatus(data["status"])
         if "deadline" in data and data["deadline"]:
-            new_deadline = datetime.fromisoformat(data["deadline"].replace("Z", "+00:00")).date()
-            old_deadline_str = project.deadline.strftime('%Y-%m-%d') if project.deadline else 'Not set'
-            new_deadline_str = new_deadline.strftime('%Y-%m-%d')
-            
-            if project.deadline != new_deadline:
-                changes.append({
-                    "field": "deadline",
-                    "old_value": old_deadline_str,
-                    "new_value": new_deadline_str
-                })
-                project.deadline = new_deadline
-                print(f"DEBUG: Deadline changed: {old_deadline_str} -> {new_deadline_str}")
-
-        # Update owner
-        new_owner = None
+            project.deadline = datetime.fromisoformat(data["deadline"].replace("Z", "+00:00")).date()
         if "owner" in data:
             owner = User.query.filter_by(email=data["owner"]).first()
-            if owner and owner.id != project.owner_id:
-                changes.append({
-                    "field": "owner",
-                    "old_value": project.owner.email,
-                    "new_value": owner.email
-                })
-                project.owner = owner
-                new_owner = owner
-                print(f"DEBUG: Owner changed: {owner.email}")
+            if owner: project.owner = owner
 
-        # Track attachment changes
-        removed_attachments = []
-        
-        # Handle existing attachments removal
-        if "existing_attachments" in data:
-            existing_attachments = data["existing_attachments"]
-            if isinstance(existing_attachments, str):
-                try:
-                    existing_attachments = json.loads(existing_attachments)
-                except json.JSONDecodeError:
-                    existing_attachments = []
-            
-            existing_ids = [att.get("id") for att in existing_attachments if att.get("id")]
-            print(f"DEBUG: Keeping attachment IDs: {existing_ids}")
-            
-            # Find removed attachments
-            for att in project.attachments[:]:
-                if att.id not in existing_ids:
-                    removed_attachments.append(att.filename)
-                    db.session.delete(att)
-                    print(f"DEBUG: Removing attachment: {att.filename}")
-
-        # Add new files
-        added_attachments = []
-        if new_files:
-            for file in new_files:
-                if file.filename:  # Only process if filename is not empty
-                    # FIX: Only set project_id, task_id remains NULL for project attachments
-                    attachment = Attachment(
-                        filename=file.filename,
-                        content=file.read(),
-                        project_id=project.id  # Only set project_id
-                    )
-                    db.session.add(attachment)
-                    added_attachments.append(file.filename)
-                    print(f"DEBUG: Adding new attachment: {file.filename}")
-
-        # Add attachment changes to the changes list
-        for filename in removed_attachments:
-            changes.append({
-                "field": "attachment",
-                "old_value": filename,
-                "new_value": "Removed"
-            })
-            
-        for filename in added_attachments:
-            changes.append({
-                "field": "attachment",
-                "old_value": "None", 
-                "new_value": filename
-            })
-
-        # Track new collaborators
         new_collaborators = []
         if collaborator_emails is not None:
-            current_emails = {user.email for user in project.collaborators}
-            new_emails = set(collaborator_emails)
-            
-            # Find added collaborators
-            added_emails = new_emails - current_emails
-            for email in added_emails:
-                user = User.query.filter_by(email=email).first()
-                if user:
-                    new_collaborators.append(user)
-            
-            # Update collaborators
-            if current_emails != new_emails:
-                changes.append({
-                    "field": "collaborators",
-                    "old_value": ", ".join(current_emails) if current_emails else "None",
-                    "new_value": ", ".join(new_emails) if new_emails else "None"
-                })
-            
             project.collaborators.clear()
             for email in collaborator_emails:
                 user = User.query.filter_by(email=email).first()
                 if user:
                     project.collaborators.append(user)
+                    if email not in old_collaborator_emails:
+                        new_collaborators.append(user)
 
-        # Update existing attachments (this was causing the error)
         if "existing_attachments" in data:
             existing_attachments = json.loads(data["existing_attachments"])
-            existing_ids = [att.get("id") for att in existing_attachments if att.get("id")]
+            existing_ids = [att.get("id") for att in existing_attachments]
             
             for att in project.attachments[:]:
                 if att.id not in existing_ids:
                     db.session.delete(att)
 
-        print(f"DEBUG: Total changes detected: {len(changes)}")
-        print(f"DEBUG: Changes: {changes}")
+        if new_files:
+            for file in new_files:
+                attachment = Attachment(filename=file.filename, content=file.read(), project=project)
+                db.session.add(attachment)
 
         db.session.commit()
         
-        # Get current user for email notification
-        from flask_jwt_extended import get_jwt_identity
-        current_user_id = get_jwt_identity()
-        current_user = User.query.get(int(current_user_id))
-        
-        # Send email notifications only if there are changes
-        if changes and current_user:
-            print(f"DEBUG: Sending project update notifications for {len(changes)} changes")
-    
-            # Send email notifications
-            send_project_update_email_notification(project, current_user, changes)
-    
-            if new_collaborators:
-                send_project_collaborator_added_email_notification(project, current_user, new_collaborators)
+        send_project_update_email_notification(project)
+        for user in new_collaborators:
+            send_project_collaborator_added_email_notification(user.email, project)
         
         return project
     
@@ -297,6 +147,53 @@ def update_project(project_id, data, new_files, collaborator_emails=None):
         db.session.rollback()
         raise e
 
+# --- HELPER FUNCTION FOR RECURRING TASKS ---
+def get_recurring_task_instances(task, start_date, end_date):
+    if not task.isRecurring or task.recurrence_type == RecurrenceType.NONE:
+        return []
+    
+    instances = []
+    current_date = task.duedate
+    
+    if not current_date:
+        return []
+
+    while current_date < start_date:
+        if task.recurrence_type == RecurrenceType.DAILY:
+            current_date += timedelta(days=1)
+        elif task.recurrence_type == RecurrenceType.WEEKLY:
+            current_date += timedelta(weeks=1)
+        elif task.recurrence_type == RecurrenceType.MONTHLY:
+            current_date += relativedelta(months=1)
+        elif task.recurrence_type == RecurrenceType.CUSTOM and task.recurrence_interval:
+            current_date += timedelta(days=task.recurrence_interval)
+        else:
+            break
+    
+    max_instances = 50
+    while current_date <= end_date and len(instances) < max_instances:
+        instances.append({
+            "title": f"{task.title} (Projected)",
+            "duedate": current_date.isoformat(),
+            # --- THIS IS THE FIX 1 ---
+            "status": "Projected", 
+        })
+        
+        if task.recurrence_type == RecurrenceType.DAILY:
+            current_date += timedelta(days=1)
+        elif task.recurrence_type == RecurrenceType.WEEKLY:
+            current_date += timedelta(weeks=1)
+        elif task.recurrence_type == RecurrenceType.MONTHLY:
+            current_date += relativedelta(months=1)
+        elif task.recurrence_type == RecurrenceType.CUSTOM and task.recurrence_interval:
+            current_date += timedelta(days=task.recurrence_interval)
+        else:
+            break
+    
+    return instances
+
+# ------------------------------------
+# MODIFIED FUNCTION
 # ------------------------------------
 def get_project_report_data(project_id, user_id):
     try:
@@ -311,7 +208,7 @@ def get_project_report_data(project_id, user_id):
         if user.id != project.owner_id and user not in project.collaborators:
             raise PermissionError("You do not have access to generate reports for this project.")
         
-        # --- Task Counting ---
+        # --- 1. Task Counts (from existing DB tasks) ---
         status_counts_query = db.session.query(
             Task.status, 
             func.count(Task.id)
@@ -321,15 +218,42 @@ def get_project_report_data(project_id, user_id):
             Task.status
         ).all()
 
-        # 1. Initialize a dictionary with ALL possible statuses from your enum
-        report_data = {status.value: 0 for status in TaskStatus}
-
-        # 2. Overwrite the 0s with the actual counts from the query
+        task_counts = {status.value: 0 for status in TaskStatus}
         for status_enum, count in status_counts_query:
-            report_data[status_enum.value] = count
+            task_counts[status_enum.value] = count
         
-        # 3. Return the dictionary as-is.
-        return report_data
+        # --- 2. Task Schedule (Existing + Projected) ---
+        project_tasks = Task.query.filter_by(project_id=project_id).all()
+        
+        task_schedule = []
+        
+        start_date = datetime.utcnow().date()
+        end_date = start_date + timedelta(days=90) # Project 90 days out
+
+        projected_task_count = 0 # Initialize counter
+
+        for task in project_tasks:
+            if task.status != TaskStatus.COMPLETED:
+                task_schedule.append({
+                    "title": task.title,
+                    "duedate": task.duedate.isoformat() if task.duedate else None,
+                    "status": task.status.value,
+                })
+
+            if task.isRecurring:
+                projected_tasks = get_recurring_task_instances(task, start_date, end_date)
+                task_schedule.extend(projected_tasks)
+                projected_task_count += len(projected_tasks) # Add to counter
+
+        # --- THIS IS THE FIX 2 ---
+        # Add the "Projected" count to the task_counts dictionary
+        task_counts["Projected"] = projected_task_count
+
+        # --- 3. Return both ---
+        return {
+            "task_counts": task_counts,
+            "task_schedule": task_schedule
+        }
 
     except SQLAlchemyError as e:
         raise RuntimeError(f"Database error while generating report data: {e}")
