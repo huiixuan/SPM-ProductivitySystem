@@ -1,14 +1,53 @@
 from flask import Blueprint, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from datetime import datetime, date
-from app.models import db, User, Project, Task, ProjectStatus, TaskStatus
+from datetime import datetime, date, timedelta
+from app.models import db, User, Project, Task, ProjectStatus, TaskStatus, RecurrenceType
+from dateutil.relativedelta import relativedelta
 
 calendar_bp = Blueprint("calendar", __name__)
+
+def get_recurring_task_instances(task, start_date, end_date):
+    """Generate recurring task instances within a date range"""
+    if not task.isRecurring or task.recurrence_type == RecurrenceType.NONE:
+        return []
+    
+    instances = []
+    current_date = task.duedate
+    max_instances = 10  # Limit to prevent infinite loops
+    
+    while current_date <= end_date and len(instances) < max_instances:
+        if current_date >= start_date:
+            instances.append({
+                "id": f"task-{task.id}-{current_date.isoformat()}",
+                "title": f"{task.title} (Recurring)",
+                "description": task.description,
+                "start": current_date.isoformat(),
+                "end": current_date.isoformat(),
+                "type": "task",
+                "status": "upcoming",  # Recurring instances are always upcoming
+                "duedate": current_date.isoformat(),
+                "is_recurring_instance": True,
+                "parent_task_id": task.id
+            })
+        
+        # Calculate next occurrence
+        if task.recurrence_type == RecurrenceType.DAILY:
+            current_date += timedelta(days=1)
+        elif task.recurrence_type == RecurrenceType.WEEKLY:
+            current_date += timedelta(weeks=1)
+        elif task.recurrence_type == RecurrenceType.MONTHLY:
+            current_date += relativedelta(months=1)
+        elif task.recurrence_type == RecurrenceType.CUSTOM and task.recurrence_interval:
+            current_date += timedelta(days=task.recurrence_interval)
+        else:
+            break
+    
+    return instances
 
 @calendar_bp.route("/personal", methods=["GET"])
 @jwt_required()
 def get_personal_calendar():
-    """Get current user's tasks and projects for calendar"""
+    """Get current user's tasks and projects for calendar including recurring tasks"""
     try:
         user_id_str = get_jwt_identity()
         user_id = int(user_id_str)
@@ -28,6 +67,8 @@ def get_personal_calendar():
         ).all()
 
         now = date.today()
+        # Look 3 months ahead for recurring tasks
+        future_date = now + timedelta(days=90)
         
         # Process projects
         for project in user_projects:
@@ -54,6 +95,7 @@ def get_personal_calendar():
 
         for task in user_tasks:
             if task.duedate:
+                # Add the original task
                 if task.duedate < now and task.status != TaskStatus.COMPLETED:
                     status = "overdue"
                 elif task.status == TaskStatus.COMPLETED:
@@ -72,7 +114,14 @@ def get_personal_calendar():
                     "type": "task",
                     "status": status,
                     "duedate": task.duedate.isoformat(),
+                    "is_recurring": task.isRecurring,
+                    "recurrence_type": task.recurrence_type.value if task.recurrence_type else None
                 })
+
+                # Add recurring instances for incomplete recurring tasks
+                if task.isRecurring and task.status != TaskStatus.COMPLETED:
+                    recurring_instances = get_recurring_task_instances(task, now, future_date)
+                    events.extend(recurring_instances)
 
         return jsonify({"events": events}), 200
 
@@ -82,7 +131,7 @@ def get_personal_calendar():
 @calendar_bp.route("/team", methods=["GET"])
 @jwt_required()
 def get_team_calendar():
-    """Get team calendar data - ENHANCED for better filtering"""
+    """Get team calendar data - ENHANCED for better filtering including recurring tasks"""
     try:
         user_id_str = get_jwt_identity()
         user_id = int(user_id_str)
@@ -127,6 +176,7 @@ def get_team_calendar():
 
         events = []
         now = date.today()
+        future_date = now + timedelta(days=90)
 
         for project in team_projects:
             if project.deadline:
@@ -142,7 +192,6 @@ def get_team_calendar():
                 owner = db.session.get(User, project.owner_id)
                 owner_email = owner.email if owner else "Unknown"
                 
-
                 project_collaborator_emails = [collab.email for collab in project.collaborators]
                 
                 events.append({
@@ -160,6 +209,7 @@ def get_team_calendar():
 
         for task in team_tasks:
             if task.duedate:
+                # Add original task
                 if task.duedate < now and task.status != TaskStatus.COMPLETED:
                     status = "overdue"
                 elif task.status == TaskStatus.COMPLETED:
@@ -184,18 +234,33 @@ def get_team_calendar():
                     "status": status,
                     "assignee": owner.name if owner else "Unknown",
                     "assigneeEmail": owner_email,
-                    "collaborators": collaborator_emails  
+                    "collaborators": collaborator_emails,
+                    "is_recurring": task.isRecurring,
+                    "recurrence_type": task.recurrence_type.value if task.recurrence_type else None
                 })
+
+                # Add recurring instances for incomplete recurring tasks
+                if task.isRecurring and task.status != TaskStatus.COMPLETED:
+                    recurring_instances = get_recurring_task_instances(task, now, future_date)
+                    # Add team info to recurring instances
+                    for instance in recurring_instances:
+                        instance.update({
+                            "assignee": owner.name if owner else "Unknown",
+                            "assigneeEmail": owner_email,
+                            "collaborators": collaborator_emails
+                        })
+                    events.extend(recurring_instances)
 
         return jsonify({"events": events}), 200
 
     except Exception as e:
         return jsonify({"error": f"An unexpected server error occurred: {e}"}), 500
 
+# Keep the rest of the existing functions (workload, debug-team) the same...
 @calendar_bp.route("/workload", methods=["GET"])
 @jwt_required()
 def get_workload_data():
-    """Get workload data for all users - FIXED to only count active calendar items"""
+    """Get workload data for all users - UPDATED to include recurring tasks"""
     try:
         user_id_str = get_jwt_identity()
         user_id = int(user_id_str)
@@ -208,15 +273,29 @@ def get_workload_data():
         
         workload_data = []
         now = date.today()
+        future_date = now + timedelta(days=30)  # Count recurring tasks in next 30 days
         
         for user in all_users:
+            # Count base tasks (non-recurring and first instance of recurring)
             calendar_tasks_count = Task.query.filter(
                 ((Task.owner_id == user.id) | (Task.collaborators.any(User.id == user.id))),
-                Task.duedate.isnot(None),  # Only tasks with due dates
-                Task.status != TaskStatus.COMPLETED  # Only active tasks
+                Task.duedate.isnot(None),
+                Task.status != TaskStatus.COMPLETED
             ).count()
             
-  
+            # Count additional recurring instances in next 30 days
+            recurring_tasks = Task.query.filter(
+                ((Task.owner_id == user.id) | (Task.collaborators.any(User.id == user.id))),
+                Task.duedate.isnot(None),
+                Task.status != TaskStatus.COMPLETED,
+                Task.isRecurring == True
+            ).all()
+            
+            recurring_instances_count = 0
+            for task in recurring_tasks:
+                instances = get_recurring_task_instances(task, now, future_date)
+                recurring_instances_count += len(instances)
+            
             overdue_tasks_count = Task.query.filter(
                 ((Task.owner_id == user.id) | (Task.collaborators.any(User.id == user.id))),
                 Task.duedate.isnot(None),
@@ -226,21 +305,22 @@ def get_workload_data():
             
             calendar_projects_count = Project.query.filter(
                 (Project.owner_id == user.id) | (Project.collaborators.any(User.id == user.id)),
-                Project.deadline.isnot(None),  
-                Project.status != ProjectStatus.COMPLETED  
+                Project.deadline.isnot(None),
+                Project.status != ProjectStatus.COMPLETED
             ).count()
             
-            total_workload = calendar_tasks_count + calendar_projects_count
+            total_workload = calendar_tasks_count + recurring_instances_count + calendar_projects_count
             
             workload_data.append({
                 "id": user.id,
                 "name": user.name,
                 "email": user.email,
                 "role": user.role.value,
-                "workload": total_workload,  
-                "task_count": calendar_tasks_count,
+                "workload": total_workload,
+                "task_count": calendar_tasks_count + recurring_instances_count,
                 "project_count": calendar_projects_count,
-                "overdue_count": overdue_tasks_count
+                "overdue_count": overdue_tasks_count,
+                "recurring_instances_count": recurring_instances_count
             })
         
         return jsonify({"team_members": workload_data}), 200
@@ -248,6 +328,7 @@ def get_workload_data():
     except Exception as e:
         return jsonify({"error": f"An unexpected server error occurred: {e}"}), 500
 
+# Keep the existing debug-team endpoint...
 @calendar_bp.route("/debug-team", methods=["GET"])
 @jwt_required()
 def debug_team_data():

@@ -48,7 +48,7 @@ def create_project_route():
         traceback.print_exc()
         return jsonify({"success": False, "error": str(e)}), 500
 
-# --- THIS IS THE CORRECTED FUNCTION ---
+
 @project_bp.route("/get-all-projects", methods=["GET"])
 @jwt_required()
 def get_all_projects_route():
@@ -96,7 +96,15 @@ def update_project_route(project_id):
     try:
         data = request.form
         new_files = request.files.getlist("attachments")
+        
+        print(f"DEBUG: Update project route - Project ID: {project_id}")
+        print(f"DEBUG: Form data: {dict(data)}")
+        print(f"DEBUG: Files received: {[f.filename for f in new_files]}")
+        
+        # Get collaborators from form data
         collaborator_emails = data.getlist("collaborators")
+        print(f"DEBUG: Collaborators: {collaborator_emails}")
+        
         project = project_services.update_project(project_id, dict(data), new_files, collaborator_emails)
 
         return jsonify({
