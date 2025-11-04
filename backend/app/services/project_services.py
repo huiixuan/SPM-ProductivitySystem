@@ -201,8 +201,6 @@ def update_project(project_id, data, new_files, collaborator_emails=None):
         raise e
 
 # ------------------------------------
-# THIS IS THE FUNCTION THE SERVER CAN'T FIND
-# ------------------------------------
 def get_project_report_data(project_id, user_id):
     try:
         project = Project.query.get(project_id)
