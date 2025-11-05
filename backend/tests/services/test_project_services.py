@@ -62,7 +62,8 @@ def test_create_project_with_collaborators(session, app_instance):
         db.session.commit()
 
         with patch('flask_jwt_extended.get_jwt_identity', return_value=owner.id), \
-             patch('app.services.project_services.send_project_creation_email_notification') as mock_email:
+             patch('app.services.project_services.send_project_creation_email_notification') as mock_email, \
+             patch('app.services.project_services.send_project_collaborator_added_email_notification') as mock_collab_email:
             project = create_project(
                 name="Launch",
                 description="New project",

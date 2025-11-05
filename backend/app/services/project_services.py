@@ -48,8 +48,8 @@ def create_project(name, description, deadline, status, owner_email, collaborato
         
         # Send notifications
         send_project_creation_email_notification(project)
-        for user in collaborators:
-            send_project_collaborator_added_email_notification(user.email, project)
+        if collaborators:
+            send_project_collaborator_added_email_notification(project, owner, collaborators)
             
         return project
     
@@ -137,8 +137,8 @@ def update_project(project_id, data, new_files, collaborator_emails=None):
         db.session.commit()
         
         send_project_update_email_notification(project)
-        for user in new_collaborators:
-            send_project_collaborator_added_email_notification(user.email, project)
+        if new_collaborators:
+            send_project_collaborator_added_email_notification(project, project.owner, new_collaborators)
         
         return project
     
