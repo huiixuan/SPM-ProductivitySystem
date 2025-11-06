@@ -135,6 +135,11 @@ class TestCreateTask:
         """Test successful task creation"""
         mock_get_user.return_value = mock_user
         mock_task_instance = Mock()
+        mock_task_instance.collaborators = []
+        mock_task_instance.owner = mock_user
+        mock_task_instance.project = None
+        mock_task_instance.title = "New Task"
+        mock_task_instance.duedate = date.today()
         mock_task_class.return_value = mock_task_instance
 
         result = create_task(
@@ -181,6 +186,11 @@ class TestCreateTask:
         """Test task creation with collaborators"""
         mock_get_user.side_effect = [mock_user, mock_collaborator]
         mock_task_instance = Mock()
+        mock_task_instance.collaborators = [mock_collaborator]
+        mock_task_instance.owner = mock_user
+        mock_task_instance.project = None
+        mock_task_instance.title = "New Task"
+        mock_task_instance.duedate = date.today()
         mock_task_class.return_value = mock_task_instance
 
         result = create_task(
@@ -208,6 +218,11 @@ class TestCreateTask:
         mock_get_user.return_value = mock_user
         mock_project_class.query.get.return_value = mock_project
         mock_task_instance = Mock()
+        mock_task_instance.collaborators = []
+        mock_task_instance.owner = mock_user
+        mock_task_instance.project = mock_project
+        mock_task_instance.title = "New Task"
+        mock_task_instance.duedate = date.today()
         mock_task_class.return_value = mock_task_instance
 
         result = create_task(
@@ -235,6 +250,11 @@ class TestCreateTask:
         """Test task creation with file attachments"""
         mock_get_user.return_value = mock_user
         mock_task_instance = Mock()
+        mock_task_instance.collaborators = []
+        mock_task_instance.owner = mock_user
+        mock_task_instance.project = None
+        mock_task_instance.title = "New Task"
+        mock_task_instance.duedate = date.today()
         mock_task_class.return_value = mock_task_instance
 
         mock_file = Mock()
@@ -263,6 +283,11 @@ class TestCreateTask:
         """Test task creation with database error"""
         mock_get_user.return_value = mock_user
         mock_task_instance = Mock()
+        mock_task_instance.collaborators = []
+        mock_task_instance.owner = mock_user
+        mock_task_instance.project = None
+        mock_task_instance.title = "New Task"
+        mock_task_instance.duedate = date.today()
         mock_task_class.return_value = mock_task_instance
         mock_db_session.commit.side_effect = SQLAlchemyError("Database error")
 
@@ -467,8 +492,13 @@ class TestUpdateTask:
     """Tests for update_task function"""
 
     @patch('app.services.task_services.Task')
-    def test_update_task_basic_fields(self, mock_task_class, mock_db_session, mock_task, notification_funcs):
+    def test_update_task_basic_fields(self, mock_task_class, mock_db_session, mock_task, notification_funcs, monkeypatch):
         """Test updating basic task fields"""
+        # Patch request context using monkeypatch
+        mock_request = Mock()
+        mock_request.files = {}
+        monkeypatch.setattr('app.services.task_services.request', mock_request)
+
         mock_task_class.query.get.return_value = mock_task
 
         data = {
@@ -488,8 +518,11 @@ class TestUpdateTask:
         mock_db_session.commit.assert_called()
 
     @patch('app.services.task_services.Task')
-    def test_update_task_duedate(self, mock_task_class, mock_db_session, mock_task, notification_funcs):
+    def test_update_task_duedate(self, mock_task_class, mock_db_session, mock_task, notification_funcs, monkeypatch):
         """Test updating task due date"""
+        mock_request = Mock()
+        mock_request.files = {}
+        monkeypatch.setattr('app.services.task_services.request', mock_request)
         mock_task_class.query.get.return_value = mock_task
         new_date = "2025-12-31T00:00:00Z"
 
@@ -502,8 +535,11 @@ class TestUpdateTask:
         notification_funcs.update_notifications_for_task.assert_called_once_with(mock_task)
 
     @patch('app.services.task_services.Task')
-    def test_update_task_status(self, mock_task_class, mock_db_session, mock_task, notification_funcs):
+    def test_update_task_status(self, mock_task_class, mock_db_session, mock_task, notification_funcs, monkeypatch):
         """Test updating task status"""
+        mock_request = Mock()
+        mock_request.files = {}
+        monkeypatch.setattr('app.services.task_services.request', mock_request)
         mock_task_class.query.get.return_value = mock_task
 
         data = {"status": "Ongoing"}
@@ -515,8 +551,11 @@ class TestUpdateTask:
         mock_db_session.commit.assert_called()
 
     @patch('app.services.task_services.Task')
-    def test_update_task_invalid_status(self, mock_task_class, mock_db_session, mock_task, notification_funcs):
+    def test_update_task_invalid_status(self, mock_task_class, mock_db_session, mock_task, notification_funcs, monkeypatch):
         """Test updating with invalid status"""
+        mock_request = Mock()
+        mock_request.files = {}
+        monkeypatch.setattr('app.services.task_services.request', mock_request)
         mock_task_class.query.get.return_value = mock_task
 
         data = {"status": "INVALID_STATUS"}
@@ -528,9 +567,11 @@ class TestUpdateTask:
 
     @patch('app.services.task_services.User')
     @patch('app.services.task_services.Task')
-    def test_update_task_owner(self, mock_task_class, mock_user_class, mock_db_session,
-                               mock_task, mock_user, notification_funcs):
+    def test_update_task_owner(self, mock_task_class, mock_user_class, mock_db_session, mock_task, mock_user, notification_funcs, monkeypatch):
         """Test updating task owner"""
+        mock_request = Mock()
+        mock_request.files = {}
+        monkeypatch.setattr('app.services.task_services.request', mock_request)
         mock_task_class.query.get.return_value = mock_task
         existing_owner = Mock(spec=User)
         existing_owner.email = "owner@example.com"
@@ -555,9 +596,11 @@ class TestUpdateTask:
 
     @patch('app.services.task_services.User')
     @patch('app.services.task_services.Task')
-    def test_update_task_collaborators(self, mock_task_class, mock_user_class,
-                                      mock_db_session, mock_task, mock_collaborator, notification_funcs):
+    def test_update_task_collaborators(self, mock_task_class, mock_user_class, mock_db_session, mock_task, mock_collaborator, notification_funcs, monkeypatch):
         """Test updating task collaborators"""
+        mock_request = Mock()
+        mock_request.files = {}
+        monkeypatch.setattr('app.services.task_services.request', mock_request)
         mock_task_class.query.get.return_value = mock_task
         collaborators_mock = Mock()
         collaborators_mock.__iter__ = Mock(return_value=iter([]))
@@ -574,9 +617,11 @@ class TestUpdateTask:
 
     @patch('app.services.task_services.Attachment')
     @patch('app.services.task_services.Task')
-    def test_update_task_add_attachments(self, mock_task_class, mock_attachment_class,
-                                        mock_db_session, mock_task, notification_funcs):
+    def test_update_task_add_attachments(self, mock_task_class, mock_attachment_class, mock_db_session, mock_task, notification_funcs, monkeypatch):
         """Test adding new attachments to task"""
+        mock_request = Mock()
+        mock_request.files = {}
+        monkeypatch.setattr('app.services.task_services.request', mock_request)
         mock_task_class.query.get.return_value = mock_task
 
         mock_file = Mock()
@@ -589,8 +634,11 @@ class TestUpdateTask:
         mock_attachment_class.assert_called_once()
 
     @patch('app.services.task_services.Task')
-    def test_update_task_remove_attachments(self, mock_task_class, mock_db_session, mock_task, notification_funcs):
+    def test_update_task_remove_attachments(self, mock_task_class, mock_db_session, mock_task, notification_funcs, monkeypatch):
         """Test removing attachments from task"""
+        mock_request = Mock()
+        mock_request.files = {}
+        monkeypatch.setattr('app.services.task_services.request', mock_request)
         mock_task_class.query.get.return_value = mock_task
         
         mock_attachment = Mock()
@@ -605,9 +653,11 @@ class TestUpdateTask:
         mock_db_session.delete.assert_called_once_with(mock_attachment)
 
     @patch('app.services.task_services.Task')
-    def test_update_task_completed_removes_notifications(self, mock_task_class,
-                                                        mock_db_session, mock_task, notification_funcs):
+    def test_update_task_completed_removes_notifications(self, mock_task_class, mock_db_session, mock_task, notification_funcs, monkeypatch):
         """Test that completing a task removes notifications"""
+        mock_request = Mock()
+        mock_request.files = {}
+        monkeypatch.setattr('app.services.task_services.request', mock_request)
         mock_task_class.query.get.return_value = mock_task
         # Mock the status to be COMPLETED after update
         mock_task.status = TaskStatus.UNASSIGNED
@@ -616,23 +666,32 @@ class TestUpdateTask:
 
         data = {"status": "Completed"}
 
-        result = update_task(1, data, None)
+        # Patch send_task_update_notification to a mock and verify it was called
+        from app.services import notification_services
+        mock_send_update = Mock()
+        monkeypatch.setattr(notification_services, "send_task_update_notification", mock_send_update)
 
-        # Verify status change notification was triggered
-        notification_funcs.create_task_update_notification.assert_called_once()
+        update_task(1, data, None)
+        mock_send_update.assert_called()
         notification_funcs.remove_notifications_for_task.assert_not_called()
 
     @patch('app.services.task_services.Task')
-    def test_update_task_not_found(self, mock_task_class, mock_db_session):
+    def test_update_task_not_found(self, mock_task_class, mock_db_session, monkeypatch):
         """Test updating non-existent task"""
+        mock_request = Mock()
+        mock_request.files = {}
+        monkeypatch.setattr('app.services.task_services.request', mock_request)
         mock_task_class.query.get.return_value = None
 
         with pytest.raises(ValueError, match="Task with task ID .* not found"):
             update_task(999, {}, None)
 
     @patch('app.services.task_services.Task')
-    def test_update_task_database_error(self, mock_task_class, mock_db_session, mock_task):
+    def test_update_task_database_error(self, mock_task_class, mock_db_session, mock_task, monkeypatch):
         """Test updating task with database error"""
+        mock_request = Mock()
+        mock_request.files = {}
+        monkeypatch.setattr('app.services.task_services.request', mock_request)
         mock_task_class.query.get.return_value = mock_task
         mock_db_session.commit.side_effect = SQLAlchemyError("Database error")
 
@@ -642,8 +701,11 @@ class TestUpdateTask:
         mock_db_session.rollback.assert_called()
 
     @patch('app.services.task_services.Task')
-    def test_update_task_invalid_date_format(self, mock_task_class, mock_db_session, mock_task, notification_funcs):
+    def test_update_task_invalid_date_format(self, mock_task_class, mock_db_session, mock_task, notification_funcs, monkeypatch):
         """Test updating with invalid date format"""
+        mock_request = Mock()
+        mock_request.files = {}
+        monkeypatch.setattr('app.services.task_services.request', mock_request)
         mock_task_class.query.get.return_value = mock_task
 
         data = {"duedate": "invalid-date"}

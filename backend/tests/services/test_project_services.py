@@ -62,7 +62,8 @@ def test_create_project_with_collaborators(session, app_instance):
         db.session.commit()
 
         with patch('flask_jwt_extended.get_jwt_identity', return_value=owner.id), \
-             patch('app.services.project_services.send_project_creation_email_notification') as mock_email:
+             patch('app.services.project_services.send_project_creation_email_notification') as mock_email, \
+             patch('app.services.project_services.send_project_collaborator_added_email_notification') as mock_collab_email:
             project = create_project(
                 name="Launch",
                 description="New project",
@@ -203,7 +204,7 @@ def test_update_project_changes_core_fields_and_collaborators(app_instance):
             updated = update_project(
                 project.id,
                 data,
-                new_files=None,
+                new_files=[],
                 collaborator_emails=[collaborator.email],
             )
 
@@ -226,6 +227,6 @@ def test_update_project_invalid_status_raises_value_error(app_instance):
             update_project(
                 project.id,
                 {"status": "NOT_A_REAL_STATUS"},
-                new_files=None,
+                new_files=[],
                 collaborator_emails=[],
             )

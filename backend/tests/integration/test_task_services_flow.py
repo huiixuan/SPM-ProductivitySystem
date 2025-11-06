@@ -274,6 +274,12 @@ def test_update_task_covers_notifications(app_instance, seed_data, monkeypatch):
         return mapping[field]
 
     monkeypatch.setattr("sqlalchemy.orm.attributes.get_history", fake_history)
+    
+    # Patch request context to avoid "Working outside of request context" error
+    from unittest.mock import Mock
+    mock_request = Mock()
+    mock_request.files = {}
+    monkeypatch.setattr('app.services.task_services.request', mock_request)
 
     new_file = DummyFile("new.txt", b"new")
 
