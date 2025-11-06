@@ -145,6 +145,8 @@ class Task(db.Model):
             "owner_email": self.owner.email if self.owner else None,
             "project": self.project.name if self.project else None,
             "priority": self.priority,
+            "parent_id": self.parent_id,
+            "subtasks": [sub.to_dict() for sub in self.subtasks],
             "collaborators": [
                 {"id": user.id, "email": user.email, "name": user.name}
                 for user in self.collaborators

@@ -38,6 +38,8 @@ def create_task_route():
         recurrence = data.get("recurrence")
         custom_interval = data.get("custom_interval")
 
+        parent_task_id = data.get("parent_task_id")
+
         task = task_services.create_task(
             title=title,
             description=description,
@@ -50,7 +52,8 @@ def create_task_route():
             priority=priority,
             project_id=project_id,
             recurrence=recurrence,
-            customInterval=custom_interval
+            customInterval=custom_interval,
+            parent_task_id=parent_task_id
         )
 
         return jsonify({
@@ -168,6 +171,20 @@ def update_task_route(task_id):
         
         print("Update successful")
         return jsonify({"success": True, "task": task.to_dict()}), 200
+    
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+    
+@task_bp.route("/get-subtasks/<int:task_id>", methods=["GET"])
+@jwt_required()
+def get_subtask_route(task_id):
+    try:
+        print("Getting subtasks for task:", task_id)
+
+        subtasks = task_services.get_subtasks(task_id) or []
+        data = [sub.to_dict() for sub in subtasks]
+
+        return jsonify(data), 200
     
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500

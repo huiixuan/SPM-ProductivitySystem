@@ -29,7 +29,7 @@ interface Task {
         filename: string;
     }[];
     recurrence_type: string;
-    recurrence_interval: number;
+    recurrence_interval: number
 }
 
 export default function TaskDashboard({ project = false, project_id, refreshKey }: DashboardProps) {

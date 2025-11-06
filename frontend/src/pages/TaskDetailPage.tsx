@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import UpdateTaskDialog from "@/components/TaskManagement/UpdateTaskDialog";
 import CommentsSection from "@/components/Comments/CommentsSection";
+import TaskInfoCard from "@/components/TaskManagement/TaskInfoCard";
 import { toast } from "sonner";
 import TaskCreation from "@/components/TaskManagement/TaskCreation";
 
@@ -33,6 +34,8 @@ interface Task {
     owner_email: string;
     project: string;
     project_id?: number;
+    parent_id?: number | null;
+    subtasks?: Task[];
     collaborators?: {
         id: number;
         email: string;
@@ -52,6 +55,7 @@ export default function TaskDetailPage() {
     const location = useLocation();
     const navigate = useNavigate();
     const [task, setTask] = useState<Task | null>(null);
+    const [subtasks, setSubtasks] = useState<Task[]>([]);
     const [loading, setLoading] = useState(true);
     const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
     const { userData } = useAuth();
@@ -80,8 +84,30 @@ export default function TaskDetailPage() {
         }
     };
 
+    const fetchSubtasks = async () => {
+        if (!taskId) return;
+
+        setLoading(true);
+        try {
+            const res = await fetch(`/api/task/get-subtasks/${taskId}`, {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+
+            if (!res.ok) throw new Error("Failed to fetch subtasks details.");
+            const data = await res.json();
+            setSubtasks(data);
+        } catch (error) {
+            const message = error instanceof Error ? error.message : "Unknown error occurred";
+            toast.error(message);
+            console.error("Error fetching task:", error);
+        } finally {
+            setLoading(false);
+        }
+    }
+
     useEffect(() => {
         fetchTask();
+        fetchSubtasks();
     }, [taskId, token]);
 
     const handleUpdateSuccess = (updatedTask: Task) => {
@@ -212,7 +238,7 @@ export default function TaskDetailPage() {
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
 
                 <div className="lg:col-span-2 space-y-6">
                     <Card>
@@ -365,7 +391,6 @@ export default function TaskDetailPage() {
                 </div>
 
                 <div className="space-y-6">
-
                     <Card>
                         <CardHeader>
                             <CardTitle className="flex items-center gap-2">
@@ -419,7 +444,7 @@ export default function TaskDetailPage() {
                                     >
                                         <Edit className="h-4 w-4" /> Edit Task
                                     </Button>
-                                    <TaskCreation buttonName="Subtask" currentUserData={ userData } />
+                                    <TaskCreation buttonName="Subtask" currentUserData={ userData } parentTaskId={ taskId } />
                                 </div>
                             )}
 
@@ -461,6 +486,23 @@ export default function TaskDetailPage() {
                                     {task.status}
                                 </Badge>
                             </div>
+                        </CardContent>
+                    </Card>
+                </div>
+
+                <div className="space-y-6">
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Subtasks</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            {subtasks.length > 0 ? (
+                                subtasks.map(task => (
+                                    <TaskInfoCard task={task} currentUserData={userData} />
+                                ))
+                            ) : (
+                                <p className="text-gray-500 text-sm">There are no subtasks.</p>
+                            )}
                         </CardContent>
                     </Card>
                 </div>

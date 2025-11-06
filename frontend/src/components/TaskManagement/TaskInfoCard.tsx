@@ -17,27 +17,27 @@ interface UserData {
 }
 
 interface Task {
-	id: number;
-	title: string;
-	description?: string;
-	duedate: string;
-	status: string;
-	priority: number;
-	created_at: string;
-	notes: string;
-	owner_email: string;
-	project: string;
-	collaborators?: {
-		id: number;
-		email: string;
-		name?: string;
-	}[];
-	attachments?: {
-		id: number;
-		filename: string;
-	}[];
-	recurrence_type: string;
-	recurrence_interval: number;
+  id: number,
+  title: string,
+  description?: string,
+  duedate: string,
+  status: string,
+  priority: number,
+  created_at: string,
+  notes: string,
+  owner_email: string,
+  project: string,
+  collaborators?: {
+    id: number,
+    email: string,
+    name?: string
+  }[],
+  attachments?: {
+    id: number,
+    filename: string
+  }[],
+  recurrence_type: string,
+  recurrence_interval: number
 }
 
 type TaskInfoCardProps = {
