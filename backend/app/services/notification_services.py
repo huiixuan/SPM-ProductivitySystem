@@ -1,5 +1,5 @@
 from datetime import date, datetime, timedelta
-from app.models import db, Notification, Task, TaskStatus, User, NotificationType
+from app.models import db, Notification, Task, TaskStatus, User, NotificationType, Project
 from sqlalchemy.orm.attributes import get_history
 from app.services.email_services import (
     email_service,
@@ -8,13 +8,20 @@ from app.services.email_services import (
     send_task_update_email_notification,
     send_due_date_reminder_email,
     send_task_assignment_email_notification,
-    send_task_creation_email_notification
+    send_task_creation_email_notification,
+    send_project_creation_email_notification,
+    send_project_update_email_notification,
+    send_project_collaborator_added_email_notification,
+    send_project_assignment_email_notification,
+    send_task_attachment_email_notification,
+    send_project_attachment_email_notification,
+    send_task_attachment_removal_email_notification
 )
 
 TRIGGER_DAYS = [7, 3, 1]
 
 def create_notifications_for_task(task: Task):
-    """Create due date reminder notifications for a task"""
+    """Create due date reminder notifications for a task - ENHANCED with immediate in-app notifications"""
     if not task or not task.duedate:
         print(f"DEBUG: No task or due date for notifications")
         return
@@ -28,9 +35,14 @@ def create_notifications_for_task(task: Task):
     
     print(f"DEBUG: Creating DUE DATE notifications for task '{task.title}', due in {remaining_days} days on {task.duedate}")
     
-    # Only create due date notifications for future due dates
+    if remaining_days <= 7 and remaining_days >= 0:
+        create_due_date_reminder_notification(task, remaining_days)
+    
+    # Only create future due date notifications for future due dates
     if remaining_days < 0:
-        print(f"DEBUG: Task is overdue, skipping due date notification creation")
+        print(f"DEBUG: Task is overdue, skipping future due date notification creation")
+        # But create an overdue notification
+        create_due_date_reminder_notification(task, remaining_days)
         return
     
     users_to_notify = {task.owner} | set(task.collaborators or [])
@@ -54,7 +66,7 @@ def create_notifications_for_task(task: Task):
             
             # Create due date reminder notification
             payload = {
-                "project_name": task.project.name if task.project else "No Project Tasks",
+                "project_name": task.project.name if task.project else "No Project",
                 "task_title": task.title,
                 "duedate": task.duedate.isoformat() if task.duedate else None,
                 "days_until_due": days_before,
@@ -97,6 +109,96 @@ def create_notifications_for_task(task: Task):
     except Exception as e:
         db.session.rollback()
         print(f"ERROR: Failed to commit due date notifications: {e}")
+
+def create_due_date_reminder_notification(task: Task, days_until_due: int):
+    """Create in-app notification for due date reminders"""
+    users_to_notify = {task.owner} | set(task.collaborators or [])
+    
+    print(f"DEBUG: Creating due date reminder notification for '{task.title}'")
+    print(f"DEBUG: Days until due: {days_until_due}")
+    print(f"DEBUG: Users to notify: {[user.email for user in users_to_notify]}")
+
+    status = "overdue" if days_until_due < 0 else "due soon"
+    days_text = f"{-days_until_due} days ago" if days_until_due < 0 else f"in {days_until_due} days"
+
+    payload = {
+        "project_name": task.project.name if task.project else "No Project",
+        "task_title": task.title,
+        "duedate": task.duedate.isoformat() if task.duedate else None,
+        "days_until_due": days_until_due,
+        "status": status,
+        "days_text": days_text,
+        "notification_type": "due_date_reminder",
+        "priority": task.priority,
+        "current_status": task.status.value
+    }
+
+    for user in users_to_notify:
+        # Check if notification already exists to avoid duplicates
+        existing = Notification.query.filter_by(
+            user_id=user.id,
+            task_id=task.id,
+            type=NotificationType.DUE_DATE_REMINDER
+        ).filter(Notification.payload['days_until_due'].astext == str(days_until_due)).first()
+
+        if not existing:
+            notif = Notification(
+                user_id=user.id,
+                task_id=task.id,
+                payload=payload,
+                type=NotificationType.DUE_DATE_REMINDER
+            )
+            db.session.add(notif)
+            print(f"DEBUG: Created due date reminder notification for user {user.email}")
+
+    try:
+        db.session.commit()
+        print(f"DEBUG: Successfully committed due date reminder notifications")
+    except Exception as e:
+        db.session.rollback()
+        print(f"ERROR: Failed to commit due date reminder notifications: {e}")
+
+def create_recurring_task_creation_notification(next_task: Task, original_task: Task):
+    """Create in-app notification for recurring task creation"""
+    users_to_notify = {next_task.owner} | set(next_task.collaborators or [])
+    
+    print(f"DEBUG: Creating recurring task creation notification for '{next_task.title}'")
+    print(f"DEBUG: Original task: {original_task.title}")
+    print(f"DEBUG: Users to notify: {[user.email for user in users_to_notify]}")
+
+    payload = {
+        "project_name": next_task.project.name if next_task.project else "No Project",
+        "task_title": next_task.title,
+        "duedate": next_task.duedate.isoformat() if next_task.duedate else None,
+        "created_by": "System",  # Since it's system-generated
+        "task_description": next_task.description or "No description",
+        "priority": next_task.priority,
+        "status": next_task.status.value,
+        "notification_type": "recurring_task_created",
+        "original_task_id": original_task.id,
+        "original_task_title": original_task.title,
+        "recurrence_type": next_task.recurrence_type.value if next_task.recurrence_type else None
+    }
+
+    notifications_created = 0
+    for user in users_to_notify:
+        notif = Notification(
+            user_id=user.id,
+            task_id=next_task.id,
+            payload=payload,
+            type=NotificationType.TASK_UPDATED
+        )
+        db.session.add(notif)
+        notifications_created += 1
+        print(f"DEBUG: Created recurring task creation notification for user {user.email}")
+
+    if notifications_created > 0:
+        try:
+            db.session.commit()
+            print(f"DEBUG: Successfully committed {notifications_created} recurring task creation notifications")
+        except Exception as e:
+            db.session.rollback()
+            print(f"ERROR: Failed to commit recurring task creation notifications: {e}")
 
 def create_task_creation_notification(task: Task, created_by: User):
     """Create in-app notification for task creation"""
@@ -273,9 +375,12 @@ def create_notifications_for_recurring_task(next_task: Task, original_task: Task
     
     db.session.commit()
     
-    # Send email notification for the new recurring task if due soon
-    if remaining_days <= 3 and remaining_days >= 0:
-        send_due_date_reminder_email(next_task, remaining_days)
+
+    create_recurring_task_creation_notification(next_task, original_task)
+    
+
+    if remaining_days <= 7 and remaining_days >= 0:
+        create_due_date_reminder_notification(next_task, remaining_days)
 
 def create_comment_notification(comment):
     task = comment.task
@@ -315,9 +420,8 @@ def create_comment_notification(comment):
     db.session.commit()
     print(f"DEBUG: Committed {notifications_created} comment notifications")
     
-    # Send email notifications for comments
+    print(f"DEBUG: Sending email notifications for comment")
     send_comment_email_notification(comment, task, comment.user_id)
-
 
 def create_task_update_notification(task: Task, updated_by: User, updated_fields: list):
     """Create in-app notifications for task updates with debugging"""
@@ -358,108 +462,116 @@ def send_task_update_notification(task: Task, updated_by: User, updated_fields: 
     # Send email notifications
     send_task_update_email_notification(task, updated_by, updated_fields, updated_by.id)
 
-def create_task_assignment_notification(task: Task, assigned_by: User, assignee: User):
-    """Create notification when task is assigned to someone"""
-    if task.owner_id == assignee.id:
-        return 
+def create_task_assignment_notification(task: Task, assigned_by: User, assignee: User, role="collaborator"):
+    """Create in-app notification when someone is assigned to a task"""
+    # Don't notify if the assignee is the same as the person assigning
+    if assigned_by.id == assignee.id:
+        return
+    
+    print(f"DEBUG: Creating task assignment notification for {assignee.email}")
+    print(f"DEBUG: Task: {task.title}, Role: {role}, Assigned by: {assigned_by.email}")
 
     payload = {
         "project_name": task.project.name if task.project else "No Project",
         "task_title": task.title,
         "assigned_by": assigned_by.email,
-        "previous_owner": task.owner.email if task.owner else "Unknown"
+        "role": role,
+        "notification_type": "task_assignment"
     }
 
     notif = Notification(
         user_id=assignee.id,
         task_id=task.id,
         payload=payload,
-        type=NotificationType.TASK_UPDATED
+        type=NotificationType.TASK_ASSIGNMENT
     )
     db.session.add(notif)
     
-    db.session.commit()
+    try:
+        db.session.commit()
+        print(f"DEBUG: Successfully created task assignment notification for {assignee.email}")
+    except Exception as e:
+        db.session.rollback()
+        print(f"ERROR: Failed to create task assignment notification: {e}")
 
-def send_task_assignment_email_notification(task, assigned_by, assignee):
-    """Send email when a user is assigned to a task (as owner or collaborator)"""
-    
-    # Don't send email if the assignee is the same as the person assigning
+def create_project_assignment_notification(project: Project, assigned_by: User, assignee: User, role="collaborator"):
+    """Create in-app notification when someone is assigned to a project"""
+    # Don't notify if the assignee is the same as the person assigning
     if assigned_by.id == assignee.id:
         return
     
-    role = "owner" if task.owner_id == assignee.id else "collaborator"
-    
-    subject = f"📋 New task assignment: {task.title}"
-    
-    message = f"""
-    <strong>You have been assigned as {role} to a new task:</strong>
-    
-    <div class="task-info">
-        <p><strong>Task:</strong> {task.title}</p>
-        <p><strong>Description:</strong> {task.description or 'No description provided'}</p>
-        <p><strong>Due Date:</strong> {task.duedate.strftime('%Y-%m-%d') if task.duedate else 'Not set'}</p>
-        <p><strong>Priority:</strong> {task.priority}</p>
-        <p><strong>Status:</strong> {task.status.value}</p>
-        <p><strong>Assigned by:</strong> {assigned_by.email}</p>
-        <p><strong>Project:</strong> {task.project.name if task.project else 'No Project'}</p>
-    </div>
-    
-    <strong>Collaborators:</strong>
-    <ul>
-        <li>{task.owner.email} (Owner)</li>
-        {"".join([f"<li>{collab.email}</li>" for collab in task.collaborators])}
-    </ul>
-    
-    <em>Please review the task and update your progress accordingly.</em>
-    """
-    
-    email_service.send_notification_email(
-        [assignee.email],
-        subject,
-        message,
-        task.title,
-        task.id,
-        "task_assignment"
-    )
+    print(f"DEBUG: Creating project assignment notification for {assignee.email}")
+    print(f"DEBUG: Project: {project.name}, Role: {role}, Assigned by: {assigned_by.email}")
 
-def send_task_creation_email_notification(task, created_by):
-    """Send email to all involved users when a task is created"""
-    recipients = get_notification_recipients(task, created_by.id)
-    if not recipients:
-        return
-    
-    subject = f"🆕 New task created: {task.title}"
-    
-    message = f"""
-    <strong>A new task has been created:</strong>
-    
-    <div class="task-info">
-        <p><strong>Task:</strong> {task.title}</p>
-        <p><strong>Description:</strong> {task.description or 'No description provided'}</p>
-        <p><strong>Due Date:</strong> {task.duedate.strftime('%Y-%m-%d') if task.duedate else 'Not set'}</p>
-        <p><strong>Priority:</strong> {task.priority}</p>
-        <p><strong>Status:</strong> {task.status.value}</p>
-        <p><strong>Created by:</strong> {created_by.email}</p>
-        <p><strong>Project:</strong> {task.project.name if task.project else 'No Project'}</p>
-    </div>
-    
-    <strong>Team:</strong>
-    <ul>
-        <li>{task.owner.email} (Owner)</li>
-        {"".join([f"<li>{collab.email} (Collaborator)</li>" for collab in task.collaborators])}
-    </ul>
-    
-    <em>This task has been added to your schedule.</em>
-    """
-    
-    email_service.send_notification_email(
-        recipients,
-        subject,
-        message,
-        task.title,
-        task.id,
-        "task_creation"
+    payload = {
+        "project_name": project.name,
+        "assigned_by": assigned_by.email,
+        "role": role,
+        "notification_type": "project_assignment"
+    }
+
+    notif = Notification(
+        user_id=assignee.id,
+        project_id=project.id,
+        payload=payload,
+        type=NotificationType.PROJECT_ASSIGNMENT
     )
+    db.session.add(notif)
+    
+    try:
+        db.session.commit()
+        print(f"DEBUG: Successfully created project assignment notification for {assignee.email}")
+    except Exception as e:
+        db.session.rollback()
+        print(f"ERROR: Failed to create project assignment notification: {e}")
+
+def send_task_assignment_notification(task: Task, assigned_by: User, assignee: User, role="collaborator"):
+    """Send both in-app and email notifications for task assignment"""
+    # Create in-app notification
+    create_task_assignment_notification(task, assigned_by, assignee, role)
+    
+    # Send email notification
+    send_task_assignment_email_notification(task, assigned_by, assignee)
+
+def send_project_assignment_notification(project: Project, assigned_by: User, assignee: User, role="collaborator"):
+    """Send both in-app and email notifications for project assignment"""
+    # Create in-app notification
+    create_project_assignment_notification(project, assigned_by, assignee, role)
+    
+    # Send email notification
+    send_project_assignment_email_notification(project, assigned_by, assignee, role)
+
+def send_task_creation_notification(task: Task, created_by: User):
+    """Send both in-app and email notifications for task creation"""
+    # Create in-app notification
+    create_task_creation_notification(task, created_by)
+    
+    # Send email notification
+    send_task_creation_email_notification(task, created_by)
+
+def send_project_creation_notification(project: Project, created_by: User):
+    """Send both in-app and email notifications for project creation"""
+    # Create in-app notification
+    create_project_creation_notification(project, created_by)
+    
+    # Send email notification
+    send_project_creation_email_notification(project, created_by)
+
+def send_project_update_notification(project: Project, updated_by: User, updated_fields: list):
+    """Send both in-app and email notifications for project updates"""
+    # Create in-app notification
+    create_project_update_notification(project, updated_by, updated_fields)
+    
+    # Send email notification
+    send_project_update_email_notification(project, updated_by, updated_fields)
+
+def send_project_collaborator_notification(project: Project, added_by: User, new_collaborators: list):
+    """Send both in-app and email notifications for new project collaborators"""
+    # Create in-app notification
+    create_project_collaborator_added_notification(project, added_by, new_collaborators)
+    
+    # Send email notification
+    send_project_collaborator_added_email_notification(project, added_by, new_collaborators)
 
 def remove_notifications_for_task(task: Task):
     """Deletes all notifications for a given task."""
@@ -485,15 +597,6 @@ def update_notifications_for_task(task: Task):
     # Create new notifications
     create_notifications_for_task(task)
     print(f"DEBUG: Created new due date notifications for task")
-
-def get_notifications_for_user(user_id: int):
-    """Returns notifications for a user, sorted by recency"""
-    return (
-        Notification.query
-        .filter_by(user_id=user_id)
-        .order_by(Notification.created_at.desc())
-        .all()
-    )
 
 def mark_notification_as_read(notification_id: int):
     """Marks a single notification as read"""
@@ -544,7 +647,7 @@ def create_notification_payload(notification_type: NotificationType, **kwargs):
 
 def send_recurring_task_created_email_notification(next_task: Task, original_task: Task):
     """Send email notification when a new recurring task is automatically created"""
-    recipients = get_notification_recipients(next_task, None)  # No excluded user for system-generated tasks
+    recipients = get_notification_recipients(next_task, None) 
     
     if not recipients:
         return
@@ -582,22 +685,231 @@ def send_recurring_task_created_email_notification(next_task: Task, original_tas
         "recurring_task_created"
     )
 
-def create_project_update_notification(project, updated_by, changes):
+def create_project_creation_notification(project, created_by):
+    """Create in-app notifications for project creation"""
+    users_to_notify = {project.owner} | set(project.collaborators or [])
+    # Exclude the user who created the project
+    users_to_notify = {user for user in users_to_notify if user.id != created_by.id}
+    
+    print(f"DEBUG: Creating project creation notifications for '{project.name}'")
+    print(f"DEBUG: Created by: {created_by.email}")
+    print(f"DEBUG: Users to notify: {[user.email for user in users_to_notify]}")
+
+    payload = {
+        "project_name": project.name,
+        "created_by": created_by.email,
+        "project_description": project.description or "No description",
+        "deadline": project.deadline.isoformat() if project.deadline else None,
+        "status": project.status.value,
+        "notification_type": "project_creation"
+    }
+
+    notifications_created = 0
+    for user in users_to_notify:
+        notif = Notification(
+            user_id=user.id,
+            project_id=project.id, 
+            task_id=None,
+            payload=payload,
+            type=NotificationType.PROJECT_UPDATED 
+        )
+        db.session.add(notif)
+        notifications_created += 1
+        print(f"DEBUG: Created project creation notification for user {user.email}")
+
+    if notifications_created > 0:
+        try:
+            db.session.commit()
+            print(f"DEBUG: Successfully committed {notifications_created} project creation notifications")
+        except Exception as e:
+            db.session.rollback()
+            print(f"ERROR: Failed to commit project creation notifications: {e}")
+
+def create_project_update_notification(project, updated_by, updated_fields):
     """Create in-app notifications for project updates"""
     users_to_notify = {project.owner} | set(project.collaborators or [])
     users_to_notify = {user for user in users_to_notify if user.id != updated_by.id}
 
-    print(f"DEBUG: Creating project update notification for: {project.name}")
+    print(f"DEBUG: Creating project update notifications for: {project.name}")
     print(f"DEBUG: Updated by: {updated_by.email}")
+    print(f"DEBUG: Updated fields: {[f['field'] for f in updated_fields]}")
     print(f"DEBUG: Users to notify: {[u.email for u in users_to_notify]}")
 
     payload = {
         "project_name": project.name,
-        "updated_fields": changes,
+        "updated_fields": updated_fields,
         "updated_by": updated_by.email,
         "notification_type": "project_updated"
     }
 
+    notifications_created = 0
     for user in users_to_notify:
-        print(f"DEBUG: Would create project update notification for user: {user.email}")
-    print(f"DEBUG: Project update notifications would be created for {len(users_to_notify)} users")
+        notif = Notification(
+            user_id=user.id,
+            project_id=project.id, 
+            task_id=None,
+            payload=payload,
+            type=NotificationType.PROJECT_UPDATED 
+        )
+        db.session.add(notif)
+        notifications_created += 1
+        print(f"DEBUG: Created project update notification for user: {user.email}")
+
+    if notifications_created > 0:
+        try:
+            db.session.commit()
+            print(f"DEBUG: Successfully committed {notifications_created} project update notifications")
+        except Exception as e:
+            db.session.rollback()
+            print(f"ERROR: Failed to commit project update notifications: {e}")
+
+def create_project_collaborator_added_notification(project, added_by, new_collaborators):
+    """Create in-app notifications for new project collaborators"""
+    if not new_collaborators:
+        return
+
+    print(f"DEBUG: Creating project collaborator added notifications for: {project.name}")
+    print(f"DEBUG: Added by: {added_by.email}")
+    print(f"DEBUG: New collaborators: {[c.email for c in new_collaborators]}")
+
+    for collaborator in new_collaborators:
+        if collaborator.id == added_by.id:
+            continue
+            
+        payload = {
+            "project_name": project.name,
+            "added_by": added_by.email,
+            "project_owner": project.owner.email,
+            "notification_type": "project_collaborator_added"
+        }
+
+        notif = Notification(
+            user_id=collaborator.id,
+            project_id=project.id,  
+            task_id=None,
+            payload=payload,
+            type=NotificationType.PROJECT_UPDATED 
+        )
+        db.session.add(notif)
+        print(f"DEBUG: Created project collaborator notification for: {collaborator.email}")
+
+    try:
+        db.session.commit()
+        print(f"DEBUG: Successfully committed project collaborator notifications")
+    except Exception as e:
+        db.session.rollback()
+        print(f"ERROR: Failed to commit project collaborator notifications: {e}")
+
+def create_task_attachment_notification(task: Task, added_by: User, attachment_filename: str):
+    """Create in-app notification for task attachment addition"""
+    users_to_notify = {task.owner} | set(task.collaborators or [])
+    users_to_notify = {user for user in users_to_notify if user.id != added_by.id}
+
+    print(f"DEBUG: Creating task attachment notification for task: {task.title}")
+    print(f"DEBUG: Added by: {added_by.email}")
+    print(f"DEBUG: Attachment: {attachment_filename}")
+    print(f"DEBUG: Users to notify: {[u.email for u in users_to_notify]}")
+
+    payload = {
+        "project_name": task.project.name if task.project else "No Project",
+        "task_title": task.title,
+        "attachment_filename": attachment_filename,
+        "added_by": added_by.email,
+        "notification_type": "task_attachment_added"
+    }
+
+    for user in users_to_notify:
+        notif = Notification(
+            user_id=user.id,
+            task_id=task.id,
+            payload=payload,
+            type=NotificationType.TASK_UPDATED
+        )
+        db.session.add(notif)
+        print(f"DEBUG: Added task attachment notification for user: {user.email}")
+    
+    db.session.commit()
+
+def create_project_attachment_notification(project: Project, added_by: User, attachment_filename: str):
+    """Create in-app notification for project attachment addition"""
+    users_to_notify = {project.owner} | set(project.collaborators or [])
+    users_to_notify = {user for user in users_to_notify if user.id != added_by.id}
+
+    print(f"DEBUG: Creating project attachment notification for project: {project.name}")
+    print(f"DEBUG: Added by: {added_by.email}")
+    print(f"DEBUG: Attachment: {attachment_filename}")
+    print(f"DEBUG: Users to notify: {[u.email for u in users_to_notify]}")
+
+    payload = {
+        "project_name": project.name,
+        "attachment_filename": attachment_filename,
+        "added_by": added_by.email,
+        "notification_type": "project_attachment_added"
+    }
+
+    for user in users_to_notify:
+        notif = Notification(
+            user_id=user.id,
+            project_id=project.id,
+            payload=payload,
+            type=NotificationType.PROJECT_UPDATED
+        )
+        db.session.add(notif)
+        print(f"DEBUG: Added project attachment notification for user: {user.email}")
+    
+    db.session.commit()
+
+def send_task_attachment_notification(task: Task, added_by: User, attachment_filename: str):
+    """Send both in-app and email notifications for task attachment"""
+    # Create in-app notification
+    create_task_attachment_notification(task, added_by, attachment_filename)
+    
+    # Send email notification
+    send_task_attachment_email_notification(task, added_by, attachment_filename)
+
+def send_project_attachment_notification(project: Project, added_by: User, attachment_filename: str):
+    """Send both in-app and email notifications for project attachment"""
+    # Create in-app notification
+    create_project_attachment_notification(project, added_by, attachment_filename)
+    
+    # Send email notification
+    send_project_attachment_email_notification(project, added_by, attachment_filename)
+
+def create_task_attachment_removal_notification(task: Task, removed_by: User, attachment_filename: str):
+    """Create in-app notification for task attachment removal"""
+    users_to_notify = {task.owner} | set(task.collaborators or [])
+    users_to_notify = {user for user in users_to_notify if user.id != removed_by.id}
+
+    print(f"DEBUG: Creating task attachment REMOVAL notification for task: {task.title}")
+    print(f"DEBUG: Removed by: {removed_by.email}")
+    print(f"DEBUG: Attachment: {attachment_filename}")
+    print(f"DEBUG: Users to notify: {[u.email for u in users_to_notify]}")
+
+    payload = {
+        "project_name": task.project.name if task.project else "No Project",
+        "task_title": task.title,
+        "attachment_filename": attachment_filename,
+        "removed_by": removed_by.email,
+        "notification_type": "task_attachment_removed"
+    }
+
+    for user in users_to_notify:
+        notif = Notification(
+            user_id=user.id,
+            task_id=task.id,
+            payload=payload,
+            type=NotificationType.TASK_UPDATED
+        )
+        db.session.add(notif)
+        print(f"DEBUG: Added task attachment REMOVAL notification for user: {user.email}")
+    
+    db.session.commit()
+    print(f"DEBUG: Successfully committed task attachment removal notifications")
+
+def send_task_attachment_removal_notification(task: Task, removed_by: User, attachment_filename: str):
+    """Send both in-app and email notifications for task attachment removal"""
+    # Create in-app notification
+    create_task_attachment_removal_notification(task, removed_by, attachment_filename)
+    
+    # Send email notification
+    send_task_attachment_removal_email_notification(task, removed_by, attachment_filename)

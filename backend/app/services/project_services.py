@@ -10,9 +10,11 @@ from app.services.email_services import (
     send_project_update_email_notification,
     send_project_collaborator_added_email_notification
 )
+from app.services.notification_services import (
+    send_project_assignment_notification  # ✅ ADDED: For project assignment notifications
+)
 
-# ... (create_project, get_all_projects, get_project_by_id, get_project_users, update_project functions remain the same) ...
-def create_project(name, description, deadline, status, owner_email, collaborator_emails, attachments, notes):
+def create_project(name, description, deadline, status, owner_email, collaborator_emails, attachments, notes, created_by):
     try:
         owner = get_user_by_email(owner_email)
         if not owner:
@@ -38,20 +40,42 @@ def create_project(name, description, deadline, status, owner_email, collaborato
             notes=notes
         )
 
+        attachment_filenames = []
         if attachments:
             for file in attachments:
                 attachment = Attachment(filename=file.filename, content=file.read(), project=project)
                 db.session.add(attachment)
+                attachment_filenames.append(file.filename)
 
         db.session.add(project)
         db.session.commit()
         
-        # Send notifications
-        send_project_creation_email_notification(project)
-        if collaborators:
-            send_project_collaborator_added_email_notification(project, owner, collaborators)
-            
+        # Send attachment notifications for initial attachments
+        if attachment_filenames and created_by:
+            for filename in attachment_filenames:
+                from app.services.notification_services import send_project_attachment_notification
+                send_project_attachment_notification(project, created_by, filename)
+        
+        # Notify owner if they're not the creator
+        if created_by.id != owner.id:
+            from app.services.notification_services import send_project_assignment_notification
+            send_project_assignment_notification(project, created_by, owner, "owner")
+        
+        # Notify collaborators
+        for collaborator in collaborators:
+            if collaborator.id != created_by.id:
+                from app.services.notification_services import send_project_assignment_notification
+                send_project_assignment_notification(project, created_by, collaborator, "collaborator")
+
+        # Send project creation notifications
+        from app.services.notification_services import send_project_creation_notification
+        send_project_creation_notification(project, created_by)
+        
         return project
+    
+    except SQLAlchemyError as e:
+        db.session.rollback()
+        raise RuntimeError(f"Database error while creating project: {e}")
     
     except SQLAlchemyError as e:
         db.session.rollback()
@@ -68,7 +92,6 @@ def get_all_projects(user_id):
         return projects
     except SQLAlchemyError as e:
         raise RuntimeError(f"Database error while fetching projects: {e}")
-
 
 def get_project_by_id(project_id):
     try:
@@ -93,23 +116,39 @@ def get_project_users(project_id):
     except SQLAlchemyError as e:
         raise RuntimeError(f"Database error while fetching project {project_id}: {e}")
 
-def update_project(project_id, data, new_files, collaborator_emails=None):
+def update_project(project_id, data, new_files, collaborator_emails=None, updated_by=None):
     try:
         project = Project.query.get(project_id)
         if not project:
             raise ValueError(f"Project with ID {project_id} not found.")
 
+        old_values = {
+            'name': project.name,
+            'description': project.description,
+            'notes': project.notes,
+            'status': project.status,
+            'deadline': project.deadline,
+            'owner_id': project.owner_id,
+            'collaborators': [user.email for user in project.collaborators]
+        }
+        
+        updated_fields = []
         old_collaborator_emails = {user.email for user in project.collaborators}
         
-        if "name" in data: project.name = data["name"]
-        if "description" in data: project.description = data["description"]
-        if "notes" in data: project.notes = data["notes"]
-        if "status" in data: project.status = ProjectStatus(data["status"])
+        if "name" in data: 
+            project.name = data["name"]
+        if "description" in data: 
+            project.description = data["description"]
+        if "notes" in data: 
+            project.notes = data["notes"]
+        if "status" in data: 
+            project.status = ProjectStatus(data["status"])
         if "deadline" in data and data["deadline"]:
             project.deadline = datetime.fromisoformat(data["deadline"].replace("Z", "+00:00")).date()
         if "owner" in data:
             owner = User.query.filter_by(email=data["owner"]).first()
-            if owner: project.owner = owner
+            if owner: 
+                project.owner = owner
 
         new_collaborators = []
         if collaborator_emails is not None:
@@ -121,24 +160,129 @@ def update_project(project_id, data, new_files, collaborator_emails=None):
                     if email not in old_collaborator_emails:
                         new_collaborators.append(user)
 
+        removed_attachments = []
+
         if "existing_attachments" in data:
             existing_attachments = json.loads(data["existing_attachments"])
             existing_ids = [att.get("id") for att in existing_attachments]
             
             for att in project.attachments[:]:
                 if att.id not in existing_ids:
+                    removed_attachments.append(att.filename)
                     db.session.delete(att)
+                    print(f"DEBUG: Marked project attachment for deletion: {att.filename}")
+
+                    updated_fields.append({
+                        'field': 'attachment',
+                        'old_value': att.filename,
+                        'new_value': 'Removed'
+                    })
+
+        new_project_attachments = []
 
         if new_files:
             for file in new_files:
-                attachment = Attachment(filename=file.filename, content=file.read(), project=project)
-                db.session.add(attachment)
+                if file.filename:
+                    attachment = Attachment(filename=file.filename, content=file.read(), project=project)
+                    db.session.add(attachment)
+                    print(f"DEBUG: Added new attachment: {file.filename}")
+            
+                    if updated_by:
+                        from app.services.notification_services import send_project_attachment_notification
+                        send_project_attachment_notification(project, updated_by, file.filename)
+                    
+                    updated_fields.append({
+                        'field': 'attachment',
+                        'old_value': 'None',
+                        'new_value': file.filename
+                    })
+
 
         db.session.commit()
         
-        send_project_update_email_notification(project)
-        if new_collaborators:
-            send_project_collaborator_added_email_notification(project, project.owner, new_collaborators)
+        updated_fields = []
+        
+        if old_values['name'] != project.name:
+            updated_fields.append({
+                'field': 'name',
+                'old_value': old_values['name'],
+                'new_value': project.name
+            })
+            
+        if old_values['description'] != project.description:
+            updated_fields.append({
+                'field': 'description',
+                'old_value': old_values['description'],
+                'new_value': project.description
+            })
+            
+        if old_values['notes'] != project.notes:
+            updated_fields.append({
+                'field': 'notes',
+                'old_value': old_values['notes'],
+                'new_value': project.notes
+            })
+            
+        if old_values['status'] != project.status:
+            updated_fields.append({
+                'field': 'status',
+                'old_value': old_values['status'].value,
+                'new_value': project.status.value
+            })
+            
+        if old_values['deadline'] != project.deadline:
+            old_deadline = old_values['deadline'].strftime('%Y-%m-%d') if old_values['deadline'] else 'Not set'
+            new_deadline = project.deadline.strftime('%Y-%m-%d') if project.deadline else 'Not set'
+            updated_fields.append({
+                'field': 'deadline',
+                'old_value': old_deadline,
+                'new_value': new_deadline
+            })
+            
+        if old_values['owner_id'] != project.owner_id:
+            old_owner = User.query.get(old_values['owner_id'])
+            updated_fields.append({
+                'field': 'owner',
+                'old_value': old_owner.email if old_owner else 'Unknown',
+                'new_value': project.owner.email
+            })
+            
+        current_collaborator_emails = {user.email for user in project.collaborators}
+        if set(old_values['collaborators']) != current_collaborator_emails:
+            old_collabs = ', '.join(old_values['collaborators']) if old_values['collaborators'] else 'None'
+            new_collabs = ', '.join(current_collaborator_emails) if current_collaborator_emails else 'None'
+            updated_fields.append({
+                'field': 'collaborators',
+                'old_value': old_collabs,
+                'new_value': new_collabs
+            })
+        
+        for filename in removed_attachments:
+            updated_fields.append({
+                'field': 'attachment',
+                'old_value': filename,
+                'new_value': 'Removed'
+            })
+
+        for file in new_files:
+            if file.filename:
+                updated_fields.append({
+                    'field': 'attachment',
+                    'old_value': 'None',
+                    'new_value': file.filename
+                })
+        
+        if new_collaborators and updated_by:
+            for collaborator in new_collaborators:
+                if collaborator.id != updated_by.id:
+                    send_project_assignment_notification(project, updated_by, collaborator, "collaborator")
+
+        # Send project update notifications
+        if updated_by and updated_fields:
+            print(f"DEBUG: Sending project update notifications for {len(updated_fields)} changes")
+            from app.services.notification_services import create_project_update_notification
+            create_project_update_notification(project, updated_by, updated_fields)
+            send_project_update_email_notification(project, updated_by, updated_fields)
         
         return project
     
@@ -147,7 +291,6 @@ def update_project(project_id, data, new_files, collaborator_emails=None):
         db.session.rollback()
         raise e
 
-# --- HELPER FUNCTION FOR RECURRING TASKS ---
 def get_recurring_task_instances(task, start_date, end_date):
     if not task.isRecurring or task.recurrence_type == RecurrenceType.NONE:
         return []
@@ -175,7 +318,6 @@ def get_recurring_task_instances(task, start_date, end_date):
         instances.append({
             "title": f"{task.title} (Projected)",
             "duedate": current_date.isoformat(),
-            # --- THIS IS THE FIX 1 ---
             "status": "Projected", 
         })
         
@@ -192,9 +334,6 @@ def get_recurring_task_instances(task, start_date, end_date):
     
     return instances
 
-# ------------------------------------
-# MODIFIED FUNCTION
-# ------------------------------------
 def get_project_report_data(project_id, user_id):
     try:
         project = Project.query.get(project_id)
@@ -208,7 +347,6 @@ def get_project_report_data(project_id, user_id):
         if user.id != project.owner_id and user not in project.collaborators:
             raise PermissionError("You do not have access to generate reports for this project.")
         
-        # --- 1. Task Counts (from existing DB tasks) ---
         status_counts_query = db.session.query(
             Task.status, 
             func.count(Task.id)
@@ -222,15 +360,14 @@ def get_project_report_data(project_id, user_id):
         for status_enum, count in status_counts_query:
             task_counts[status_enum.value] = count
         
-        # --- 2. Task Schedule (Existing + Projected) ---
         project_tasks = Task.query.filter_by(project_id=project_id).all()
         
         task_schedule = []
         
         start_date = datetime.utcnow().date()
-        end_date = start_date + timedelta(days=90) # Project 90 days out
+        end_date = start_date + timedelta(days=90)
 
-        projected_task_count = 0 # Initialize counter
+        projected_task_count = 0
 
         for task in project_tasks:
             if task.status != TaskStatus.COMPLETED:
@@ -243,13 +380,10 @@ def get_project_report_data(project_id, user_id):
             if task.isRecurring:
                 projected_tasks = get_recurring_task_instances(task, start_date, end_date)
                 task_schedule.extend(projected_tasks)
-                projected_task_count += len(projected_tasks) # Add to counter
+                projected_task_count += len(projected_tasks)
 
-        # --- THIS IS THE FIX 2 ---
-        # Add the "Projected" count to the task_counts dictionary
         task_counts["Projected"] = projected_task_count
 
-        # --- 3. Return both ---
         return {
             "task_counts": task_counts,
             "task_schedule": task_schedule

@@ -1,10 +1,10 @@
-from flask import Blueprint, jsonify, request
+﻿from flask import Blueprint, jsonify, request
 from app.services import project_services
-from app.models import ProjectStatus, User # Make sure User is imported
+from app.models import ProjectStatus, User 
 from datetime import datetime
 from sqlalchemy.exc import SQLAlchemyError
 from flask_jwt_extended import jwt_required, get_jwt_identity
-import traceback # Helpful for debugging
+import traceback
 
 project_bp = Blueprint("project", __name__)
 
@@ -26,6 +26,9 @@ def create_project_route():
         status_enum = ProjectStatus(status) if status else ProjectStatus.NOT_STARTED
         deadline = datetime.fromisoformat(deadline_str).date() if deadline_str else None
 
+        user_id = get_jwt_identity()
+        created_by = User.query.get(user_id)
+
         project = project_services.create_project(
             name=name,
             description=description,
@@ -34,7 +37,8 @@ def create_project_route():
             owner_email=owner_email,
             collaborator_emails=collaborator_emails,
             attachments=files,
-            notes=notes
+            notes=notes,
+            created_by=created_by 
         )
 
         return jsonify({
@@ -101,11 +105,19 @@ def update_project_route(project_id):
         print(f"DEBUG: Form data: {dict(data)}")
         print(f"DEBUG: Files received: {[f.filename for f in new_files]}")
         
-        # Get collaborators from form data
         collaborator_emails = data.getlist("collaborators")
         print(f"DEBUG: Collaborators: {collaborator_emails}")
         
-        project = project_services.update_project(project_id, dict(data), new_files, collaborator_emails)
+        user_id = get_jwt_identity()
+        updated_by = User.query.get(user_id)
+        
+        project = project_services.update_project(
+            project_id, 
+            dict(data), 
+            new_files, 
+            collaborator_emails, 
+            updated_by
+        )
 
         return jsonify({
             "success": True, 

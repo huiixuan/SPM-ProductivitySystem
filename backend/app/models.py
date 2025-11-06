@@ -30,6 +30,9 @@ class NotificationType(enum.Enum):
     DUE_DATE_REMINDER = "due_date_reminder"
     NEW_COMMENT = "new_comment"
     TASK_UPDATED = "task_updated"
+    PROJECT_UPDATED = "project_updated"
+    TASK_ASSIGNMENT = "task_assignment" 
+    PROJECT_ASSIGNMENT = "project_assignment"  
 
 class RecurrenceType(enum.Enum):
     NONE = "none"
@@ -167,7 +170,6 @@ class Attachment(db.Model):
     filename = db.Column(db.String(255), nullable=False)
     content = db.Column(db.LargeBinary, nullable=False)
 
-
     task_id = db.Column(db.Integer, db.ForeignKey("tasks.id"), nullable=True) 
     task = relationship("Task", back_populates="attachments")
     
@@ -212,7 +214,6 @@ class Project(db.Model):
 
             "attachments": [{"id": att.id, "filename": att.filename} for att in self.attachments],
             
-            
             "collaborators": [{"id": c.id, "email": c.email} for c in self.collaborators],
         }
 
@@ -221,7 +222,8 @@ class Notification(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-    task_id = db.Column(db.Integer, db.ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False)
+    task_id = db.Column(db.Integer, db.ForeignKey("tasks.id", ondelete="CASCADE"), nullable=True)
+    project_id = db.Column(db.Integer, db.ForeignKey("projects.id", ondelete="CASCADE"), nullable=True)
     type = db.Column(db.Enum(NotificationType, native_enum=False), nullable=False, default=NotificationType.DUE_DATE_REMINDER)
     payload = db.Column(
         JSONB,
@@ -233,7 +235,6 @@ class Notification(db.Model):
     created_at = db.Column(db.DateTime(timezone=True), default=datetime.utcnow)
     is_read = db.Column(db.Boolean, nullable=False, default=False)
 
-
     comment_id = db.Column(db.Integer, db.ForeignKey("comments.id"), nullable=True)
 
     __table_args__ = (
@@ -243,6 +244,7 @@ class Notification(db.Model):
 
     user = db.relationship("User", back_populates="notifications")
     task = db.relationship("Task", back_populates="notifications")
+    project = db.relationship("Project")
     comment = db.relationship("Comment", back_populates="notifications")
 
     @staticmethod
@@ -268,6 +270,25 @@ class Notification(db.Model):
                 "updated_fields": kwargs.get("updated_fields"),  
                 "updated_by": kwargs.get("updated_by"),
             }
+        elif notification_type == NotificationType.PROJECT_UPDATED:
+            return {
+                "project_name": kwargs.get("project_name"),
+                "updated_fields": kwargs.get("updated_fields"),
+                "updated_by": kwargs.get("updated_by"),
+            }
+        elif notification_type == NotificationType.TASK_ASSIGNMENT: 
+            return {
+                "project_name": kwargs.get("project_name"),
+                "task_title": kwargs.get("task_title"),
+                "assigned_by": kwargs.get("assigned_by"),
+                "role": kwargs.get("role"),
+            }
+        elif notification_type == NotificationType.PROJECT_ASSIGNMENT:  
+            return {
+                "project_name": kwargs.get("project_name"),
+                "assigned_by": kwargs.get("assigned_by"),
+                "role": kwargs.get("role"),
+            }
         else:
             return {}
 
@@ -275,9 +296,112 @@ class Notification(db.Model):
     def message(self):
         p = self.payload or {}
         notification_type = p.get("notification_type", "")
+
+        if notification_type == "task_attachment_removed":
+            task_title = p.get("task_title", "Task")
+            attachment_filename = p.get("attachment_filename", "file")
+            removed_by = p.get("removed_by", "Someone")
+            return f"🗑️ {removed_by} removed attachment '{attachment_filename}' from task: '{task_title}'"
+
+        if notification_type == "recurring_task_created":
+            original_task_title = p.get("original_task_title", "Task")
+            task_title = p.get("task_title", "Task")
+            return f"🔄 New recurring task created from '{original_task_title}': '{task_title}'"
+
+        if notification_type == "due_date_reminder":
+            project_name = p.get("project_name", "No Project")
+            task_title = p.get("task_title", "Task")
+            days_until_due = p.get("days_until_due", 0)
+            actual_days = p.get("actual_days_until_due", 0)
+            
+            if actual_days == 0:
+                return f"📅 {project_name}: '{task_title}' is due today!"
+            elif actual_days == 1:
+                return f"📅 {project_name}: '{task_title}' is due tomorrow!"
+            elif actual_days > 1:
+                return f"📅 {project_name}: '{task_title}' is due in {actual_days} days."
+            else:
+                return f"⚠️ {project_name}: '{task_title}' is {-actual_days} days overdue!"
+
+
+        if notification_type == "task_attachment_added":
+            task_title = p.get("task_title", "Task")
+            attachment_filename = p.get("attachment_filename", "file")
+            added_by = p.get("added_by", "Someone")
+            return f"📎 {added_by} added attachment '{attachment_filename}' to task: '{task_title}'"
+    
+ 
+        elif notification_type == "project_attachment_added":
+            project_name = p.get("project_name", "Project")
+            attachment_filename = p.get("attachment_filename", "file")
+            added_by = p.get("added_by", "Someone")
+            return f"📎 {added_by} added attachment '{attachment_filename}' to project: '{project_name}'"
+    
+
+        if notification_type == "project_creation":
+            project_name = p.get("project_name", "Project")
+            created_by = p.get("created_by", "Someone")
+            return f"📁 {created_by} created new project: '{project_name}'"
+        
+
+        elif notification_type == "project_updated":
+            project_name = p.get("project_name", "Project")
+            updated_by = p.get("updated_by", "Someone")
+            fields = p.get("updated_fields", [])
+            
+            if fields:
+                changes = []
+                for change in fields:
+                    field = change.get('field', '').replace('_', ' ').title()
+                    old_val = change.get('old_value', 'None')
+                    new_val = change.get('new_value', 'None')
+                    
+                    if field.lower() == 'deadline':
+                        changes.append(f"📅 Deadline changed from {old_val} to {new_val}")
+                    elif field.lower() == 'status':
+                        changes.append(f"🔄 Status changed from {old_val} to {new_val}")
+                    elif field.lower() == 'owner':
+                        changes.append(f"👤 Owner changed from {old_val} to {new_val}")
+                    elif field.lower() == 'collaborators':
+                        changes.append(f"👥 Collaborators updated")
+                    elif field.lower() == 'attachment':
+                        if new_val == "Removed":
+                            changes.append(f"📎 Removed file: {old_val}")
+                        elif old_val == "None":
+                            changes.append(f"📎 Added file: {new_val}")
+                        else:
+                            changes.append(f"📎 File changed from {old_val} to {new_val}")
+                    else:
+                        changes.append(f"{field} changed from {old_val} to {new_val}")
+                
+                changes_str = ', '.join(changes)
+                return f"✏️ {updated_by} updated project '{project_name}': {changes_str}"
+            else:
+                return f"✏️ {updated_by} updated project '{project_name}'"
+        
+
+        elif notification_type == "project_collaborator_added":
+            project_name = p.get("project_name", "Project")
+            added_by = p.get("added_by", "Someone")
+            return f"👥 {added_by} added you as collaborator to project: '{project_name}'"
+
+
+        elif self.type == NotificationType.TASK_ASSIGNMENT or notification_type == "task_assignment":
+            project_name = p.get("project_name", "No Project")
+            task_title = p.get("task_title", "Task")
+            assigned_by = p.get("assigned_by", "Someone")
+            role = p.get("role", "collaborator")
+            return f"👤 {assigned_by} assigned you as {role} to task: '{task_title}' in {project_name}"
+
+      
+        elif self.type == NotificationType.PROJECT_ASSIGNMENT or notification_type == "project_assignment":
+            project_name = p.get("project_name", "Project")
+            assigned_by = p.get("assigned_by", "Someone")
+            role = p.get("role", "collaborator")
+            return f"👥 {assigned_by} assigned you as {role} to project: '{project_name}'"
     
         if self.type == NotificationType.DUE_DATE_REMINDER or notification_type == "due_date_reminder":
-            pn = p.get("project_name", "Project")
+            pn = p.get("project_name", "No Project")
             tt = p.get("task_title", "Task")
             actual_days = p.get("actual_days_until_due", 0)
         
@@ -289,7 +413,7 @@ class Notification(db.Model):
                 return f"📅 {pn}: '{tt}' is due in {actual_days} days."
     
         elif self.type == NotificationType.TASK_UPDATED:
-            pn = p.get("project_name", "Project")
+            pn = p.get("project_name", "No Project")
             tt = p.get("task_title", "Task")
         
             if notification_type == "task_creation":
@@ -349,7 +473,7 @@ class Notification(db.Model):
                 return f"✏️ {updated_by} updated '{tt}' in {pn}"
     
         elif self.type == NotificationType.NEW_COMMENT:
-            pn = p.get("project_name", "Project")
+            pn = p.get("project_name", "No Project") 
             tt = p.get("task_title", "Task")
             author = p.get("comment_author", "Someone")
             excerpt = p.get("comment_excerpt", "")
