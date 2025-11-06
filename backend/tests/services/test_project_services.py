@@ -63,8 +63,7 @@ def test_create_project_with_collaborators(session, app_instance):
         db.session.commit()
 
         with patch('flask_jwt_extended.get_jwt_identity', return_value=created_by.id), \
-             patch('app.services.project_services.send_project_creation_notification') as mock_notification, \
-             patch('app.services.project_services.send_project_assignment_notification') as mock_assignment:
+             patch('app.services.notification_services.send_project_creation_notification') as mock_notification:
             project = create_project(
                 name="Launch",
                 description="New project",
@@ -209,9 +208,9 @@ def test_update_project_changes_core_fields_and_collaborators(app_instance):
         }
 
         with patch("flask_jwt_extended.get_jwt_identity", return_value=owner.id), \
-             patch("app.services.project_services.create_project_update_notification"), \
-             patch("app.services.project_services.send_project_update_email_notification"), \
-             patch("app.services.project_services.send_project_assignment_notification"):
+             patch("app.services.notification_services.create_project_update_notification"), \
+             patch("app.services.notification_services.send_project_update_email_notification"), \
+             patch("app.services.notification_services.send_project_assignment_notification"):
             updated = update_project(
                 project.id,
                 data,

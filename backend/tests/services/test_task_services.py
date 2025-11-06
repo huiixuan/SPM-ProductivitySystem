@@ -114,8 +114,6 @@ def notification_funcs(monkeypatch):
         send_task_assignment_email_notification=MagicMock(name="send_task_assignment_email_notification"),
         send_task_update_notification=MagicMock(name="send_task_update_notification"),  
         send_task_update_email_notification=MagicMock(name="send_task_update_email_notification"),
-        create_task_creation_notification=MagicMock(name="create_task_creation_notification"),
-        send_task_creation_notification=MagicMock(name="send_task_creation_notification"),
     )
 
 
@@ -127,17 +125,17 @@ def notification_funcs(monkeypatch):
     monkeypatch.setattr('app.services.task_services.send_task_assignment_notification', mocks.send_task_assignment_notification)
     monkeypatch.setattr('app.services.task_services.send_task_update_notification', mocks.send_task_update_notification)
     monkeypatch.setattr('app.services.task_services.send_task_assignment_email_notification', mocks.send_task_assignment_email_notification)
-    monkeypatch.setattr('app.services.task_services.create_task_creation_notification', mocks.create_task_creation_notification)
-    monkeypatch.setattr('app.services.task_services.send_task_creation_notification', mocks.send_task_creation_notification)
     
 
     mock_notification_service = MagicMock()
     mock_notification_service.create_notifications_for_task = mocks.create_notifications_for_task
     monkeypatch.setattr('app.services.task_services.notification_service', mock_notification_service)
+    
 
     monkeypatch.setattr('app.services.email_services.send_task_assignment_email_notification', mocks.send_task_assignment_email_notification)
     monkeypatch.setattr('app.services.email_services.send_task_update_email_notification', mocks.send_task_update_email_notification)
     monkeypatch.setattr('app.services.email_services.send_task_creation_email_notification', lambda *args, **kwargs: None)
+    monkeypatch.setattr('app.services.notification_services.send_task_creation_notification', lambda *args, **kwargs: None)
 
     return mocks
 

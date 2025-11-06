@@ -123,8 +123,6 @@ def seed_data(app_instance, monkeypatch):
                 (task.id, getattr(assigned_by, "email", None), getattr(assignee, "email", None), role)
             )
 
-        monkeypatch.setattr(task_services, "send_task_creation_email_notification", lambda *_args, **_kwargs: None)
-
         monkeypatch.setattr(
             "app.services.email_services.send_task_creation_email_notification",
             lambda *_args, **_kwargs: None,
@@ -191,17 +189,7 @@ def seed_data(app_instance, monkeypatch):
         )
 
         monkeypatch.setattr(
-            task_services,
-            "create_task_creation_notification",
-            lambda *args, **kwargs: None,
-        )
-        monkeypatch.setattr(
-            "app.services.notification_services.create_task_creation_notification",
-            lambda *args, **kwargs: None,
-        )
-        monkeypatch.setattr(
-            task_services,
-            "send_task_creation_notification",
+            "app.services.notification_services.send_task_creation_notification",
             lambda *args, **kwargs: None,
         )
 
