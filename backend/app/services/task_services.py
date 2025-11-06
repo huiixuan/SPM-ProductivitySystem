@@ -536,3 +536,11 @@ def update_task(task_id, data, new_files):
         print(f"Unexpected error: {e}")
         db.session.rollback()
         raise
+
+def get_subtasks(parent_task_id):
+    try:
+        return Task.query.filter_by(parent_id=parent_task_id).all()
+    
+    except SQLAlchemyError as e:
+        db.session.rollback()
+        raise RuntimeError(f"Database error while getting subtasks of task {parent_task_id}: {e}")
