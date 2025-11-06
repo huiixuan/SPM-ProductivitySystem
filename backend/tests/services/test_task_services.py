@@ -109,7 +109,9 @@ def notification_funcs(monkeypatch):
         update_notifications_for_task=MagicMock(name="update_notifications_for_task"),
         remove_notifications_for_task=MagicMock(name="remove_notifications_for_task"),
         create_task_assignment_notification=MagicMock(name="create_task_assignment_notification"),
+        send_task_assignment_notification=MagicMock(name="send_task_assignment_notification"),
         send_task_assignment_email_notification=MagicMock(name="send_task_assignment_email_notification"),
+        send_task_update_notification=MagicMock(name="send_task_update_notification"),  
         send_task_update_email_notification=MagicMock(name="send_task_update_email_notification"),
     )
 
@@ -117,6 +119,8 @@ def notification_funcs(monkeypatch):
     monkeypatch.setattr('app.services.task_services.update_notifications_for_task', mocks.update_notifications_for_task)
     monkeypatch.setattr('app.services.task_services.remove_notifications_for_task', mocks.remove_notifications_for_task)
     monkeypatch.setattr('app.services.task_services.create_task_assignment_notification', mocks.create_task_assignment_notification)
+    monkeypatch.setattr('app.services.task_services.send_task_assignment_notification', mocks.send_task_assignment_notification)  # ADDED
+    monkeypatch.setattr('app.services.task_services.send_task_update_notification', mocks.send_task_update_notification)  # ADDED
     monkeypatch.setattr('app.services.task_services.send_task_assignment_email_notification', mocks.send_task_assignment_email_notification)
     monkeypatch.setattr('app.services.email_services.send_task_assignment_email_notification', mocks.send_task_assignment_email_notification)
     monkeypatch.setattr('app.services.email_services.send_task_update_email_notification', mocks.send_task_update_email_notification)
@@ -157,7 +161,7 @@ class TestCreateTask:
 
         assert result == mock_task_instance
         mock_db_session.add.assert_called()
-        mock_db_session.commit.assert_called_once()
+        assert mock_db_session.commit.call_count == 2
         mock_notif.create_notifications_for_task.assert_called_once_with(mock_task_instance)
 
     @patch('app.services.task_services.get_user_by_email')
@@ -494,7 +498,6 @@ class TestUpdateTask:
     @patch('app.services.task_services.Task')
     def test_update_task_basic_fields(self, mock_task_class, mock_db_session, mock_task, notification_funcs, monkeypatch):
         """Test updating basic task fields"""
-        # Patch request context using monkeypatch
         mock_request = Mock()
         mock_request.files = {}
         monkeypatch.setattr('app.services.task_services.request', mock_request)
@@ -591,8 +594,7 @@ class TestUpdateTask:
 
         assert result == mock_task
         assert mock_task.owner == new_owner
-        notification_funcs.create_task_assignment_notification.assert_called_once_with(mock_task, mock_user, new_owner)
-        notification_funcs.send_task_assignment_email_notification.assert_called_once_with(mock_task, mock_user, new_owner)
+        notification_funcs.send_task_assignment_notification.assert_called_once_with(mock_task, mock_user, new_owner, "owner")
 
     @patch('app.services.task_services.User')
     @patch('app.services.task_services.Task')
@@ -659,20 +661,17 @@ class TestUpdateTask:
         mock_request.files = {}
         monkeypatch.setattr('app.services.task_services.request', mock_request)
         mock_task_class.query.get.return_value = mock_task
-        # Mock the status to be COMPLETED after update
         mock_task.status = TaskStatus.UNASSIGNED
-        # Set isRecurring to False to avoid triggering create_next_recurring_task
         mock_task.isRecurring = False
 
         data = {"status": "Completed"}
 
-        # Patch send_task_update_notification to a mock and verify it was called
-        from app.services import notification_services
         mock_send_update = Mock()
-        monkeypatch.setattr(notification_services, "send_task_update_notification", mock_send_update)
+        monkeypatch.setattr('app.services.task_services.send_task_update_notification', mock_send_update)
 
         update_task(1, data, None)
-        mock_send_update.assert_called()
+
+        mock_send_update.assert_called_once()
         notification_funcs.remove_notifications_for_task.assert_not_called()
 
     @patch('app.services.task_services.Task')

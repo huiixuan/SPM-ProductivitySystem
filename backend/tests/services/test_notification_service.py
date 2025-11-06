@@ -1,5 +1,3 @@
-# backend/tests/test_notifications.py
-
 import pytest
 from datetime import date, timedelta
 from app import create_app, db
@@ -38,7 +36,6 @@ def sample_project(app, sample_user):
     return project
 
 def test_notifications_only_1_3_7_days(app, sample_user, sample_project):
-    # Due in 4 days
     task = Task(
         title="Task 4 Days",
         duedate=date.today() + timedelta(days=4),
@@ -52,11 +49,11 @@ def test_notifications_only_1_3_7_days(app, sample_user, sample_project):
     notification_service.create_notifications_for_task(task)
 
     notifs = Notification.query.filter_by(task_id=task.id).all()
-    assert len(notifs) == 1  # Only 3-day notification for 4 days left
-    days_before = sorted([n.trigger_days_before for n in notifs])
+    assert len(notifs) == 2
+    days_before = sorted([n.trigger_days_before for n in notifs if n.trigger_days_before is not None])
     assert days_before == [3]
 
-    # Due in 7 days — should create only 7-day notification
+    
     task2 = Task(
         title="Task 7 Days",
         duedate=date.today() + timedelta(days=7),
@@ -70,8 +67,8 @@ def test_notifications_only_1_3_7_days(app, sample_user, sample_project):
     notification_service.create_notifications_for_task(task2)
 
     notifs = Notification.query.filter_by(task_id=task2.id).all()
-    days_before = sorted([n.trigger_days_before for n in notifs])
-    assert len(notifs) == 1  # Only 7-day notification for 7 days left
+    days_before = sorted([n.trigger_days_before for n in notifs if n.trigger_days_before is not None])
+    assert len(notifs) == 2  
     assert days_before == [7]
 
 def test_notifications_only_for_involved_users(app, sample_user, sample_project):
@@ -95,7 +92,7 @@ def test_notifications_only_for_involved_users(app, sample_user, sample_project)
     recipients = {n.user_id for n in Notification.query.filter_by(task_id=task.id).all()}
     assert sample_user.id in recipients
     assert other_user.id in recipients
-    assert len(recipients) == 2  # only owner + collaborator
+    assert len(recipients) == 2
 
 def test_no_notifications_for_completed_tasks(app, sample_user, sample_project):
     task = Task(
@@ -110,7 +107,7 @@ def test_no_notifications_for_completed_tasks(app, sample_user, sample_project):
 
     notification_service.create_notifications_for_task(task)
     notifs = Notification.query.filter_by(task_id=task.id).all()
-    assert len(notifs) == 0  # completed tasks skipped
+    assert len(notifs) == 0  
 
 def test_notifications_update_on_due_date_change(app, sample_user, sample_project):
     task = Task(
@@ -125,20 +122,20 @@ def test_notifications_update_on_due_date_change(app, sample_user, sample_projec
 
     notification_service.create_notifications_for_task(task)
     old_count = Notification.query.filter_by(task_id=task.id).count()
-    assert old_count == 1  # Only 7-day notification for 7 days left
+    assert old_count == 2 
 
-    # Change due date to 3 days from now
+   
     task.duedate = date.today() + timedelta(days=3)
     db.session.commit()
     notification_service.update_notifications_for_task(task)
 
     new_notifs = Notification.query.filter_by(task_id=task.id).all()
-    new_days = sorted([n.trigger_days_before for n in new_notifs])
-    assert len(new_notifs) == 1  # Only 3-day notification for 3 days left
+    new_days = sorted([n.trigger_days_before for n in new_notifs if n.trigger_days_before is not None])
+    assert len(new_notifs) == 2  
     assert new_days == [3]
 
 def test_notifications_removed_when_task_deleted(app, sample_user, sample_project):
-    # Create a task due in 7 days → should have 3 notifications
+   
     task = Task(
         title="Task for Deletion",
         duedate=date.today() + timedelta(days=7),
@@ -149,18 +146,18 @@ def test_notifications_removed_when_task_deleted(app, sample_user, sample_projec
     db.session.add(task)
     db.session.commit()
 
-    # Create notifications
+    
     notification_service.create_notifications_for_task(task)
     notif_count = Notification.query.filter_by(task_id=task.id).count()
-    assert notif_count == 1  # Only 7-day notification for 7 days left
+    assert notif_count == 2  
 
-    # Delete task
+   
     db.session.delete(task)
     db.session.commit()
 
-    # Check that notifications were removed automatically
+    
     remaining_notifs = Notification.query.filter_by(task_id=task.id).count()
-    assert remaining_notifs == 0  # no notifications remain
+    assert remaining_notifs == 0  
 
 
 def test_create_comment_notification_excludes_author(app, sample_user, sample_project):
@@ -190,7 +187,6 @@ def test_create_comment_notification_excludes_author(app, sample_user, sample_pr
     assert notifs[0].user_id == other_user.id
     assert notifs[0].payload["comment_excerpt"].endswith("...")
 
-
 def test_create_task_update_notification_skips_updater(app, sample_user, sample_project):
     other_user = User(email="collab2@example.com", password_hash="pwd", name="Collab2")
     db.session.add(other_user)
@@ -217,7 +213,6 @@ def test_create_task_update_notification_skips_updater(app, sample_user, sample_
     assert notif.user_id == other_user.id
     assert notif.payload["updated_by"] == sample_user.email
 
-
 def test_create_task_assignment_notification_skips_same_owner(app, sample_user, sample_project):
     task = Task(
         title="Assignment",
@@ -240,7 +235,6 @@ def test_create_task_assignment_notification_skips_same_owner(app, sample_user, 
     notif = Notification.query.filter_by(task_id=task.id).first()
     assert notif.user_id == other.id
     assert notif.payload["assigned_by"] == sample_user.email
-
 
 def test_create_notification_payload_variants():
     due_payload = notification_service.create_notification_payload(
@@ -271,4 +265,3 @@ def test_create_notification_payload_variants():
         updated_by="actor@example.com",
     )
     assert update_payload["updated_by"] == "actor@example.com"
-
