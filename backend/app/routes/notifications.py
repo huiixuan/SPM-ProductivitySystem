@@ -1,4 +1,4 @@
-from flask import Blueprint, jsonify, request
+﻿from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from app.models import db, Notification
 from app.services.notification_services import get_notifications_for_user, mark_notification_as_read, mark_all_notifications_as_read
@@ -22,13 +22,14 @@ def get_user_notifications():
             notification_data = {
                 "id": n.id,
                 "task_id": n.task_id,
-                "type": n.type.value if hasattr(n, 'type') else 'due_date_reminder',
+                "project_id": n.project_id, 
+                "type": n.type.value,
                 "payload": n.payload,
                 "trigger_days_before": n.trigger_days_before,
                 "created_at": n.created_at.isoformat(),
                 "is_read": n.is_read,
-                "message": n.message,
-                "comment_id": n.comment_id if hasattr(n, 'comment_id') else None,
+                "message": n.message, 
+                "comment_id": n.comment_id,
             }
             response_data.append(notification_data)
             print(f"DEBUG: Notification {n.id}: {n.message}")

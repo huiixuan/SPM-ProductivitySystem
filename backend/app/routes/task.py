@@ -1,4 +1,4 @@
-from flask import Blueprint, jsonify, request, session
+﻿from flask import Blueprint, jsonify, request, session
 from app.services import task_services
 from app.models import TaskStatus
 from datetime import datetime
@@ -19,7 +19,6 @@ def create_task_route():
     print("form keys:", request.form.keys())
     print("files:", request.files)
 
-
     try:
         title = data.get("title")
         description = data.get("description")
@@ -32,13 +31,24 @@ def create_task_route():
         
         project_id = data.get("project_id")
 
+        if not status:
+            status = TaskStatus.UNASSIGNED.value
         status_enum = TaskStatus(status)
-        duedate = datetime.fromisoformat(duedate_str).date() if duedate_str else None
+        
+        duedate = None
+        if duedate_str:
+            duedate = datetime.fromisoformat(duedate_str).date()
 
         recurrence = data.get("recurrence")
         custom_interval = data.get("custom_interval")
 
         parent_task_id = data.get("parent_task_id")
+  
+        if parent_task_id:
+            try:
+                parent_task_id = int(parent_task_id)
+            except (ValueError, TypeError):
+                parent_task_id = None
 
         task = task_services.create_task(
             title=title,
@@ -61,6 +71,18 @@ def create_task_route():
             "task_id": task.id,
             "title": task.title
         }), 201
+    
+    except ValueError as ve:
+        return jsonify({"success": False, "error": str(ve)}), 400
+    
+    except SQLAlchemyError as se:
+        return jsonify({"success": False, "error": str(se)}), 500
+    
+    except Exception as e:
+        print("--- AN ERROR OCCURRED ---")
+        traceback.print_exc()
+        print("--------------------------")
+        return jsonify({"error": "An internal error occurred"}), 500
     
     except ValueError as ve:
         return jsonify({"success": False, "error": str(ve)}), 400
@@ -146,7 +168,10 @@ def link_task_route():
         return jsonify({"success": False, "error": "Task ID and Project ID are required."}), 400
 
     try:
-        task = task_services.link_task_to_project(task_id, project_id)
+        user_id = get_jwt_identity()
+        linked_by = User.query.get(int(user_id))
+
+        task = task_services.link_task_to_project(task_id, project_id, linked_by)
         return jsonify({
             "success": True,
             "task": task.to_dict(),

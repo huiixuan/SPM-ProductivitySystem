@@ -629,3 +629,190 @@ def get_project_notification_recipients(project, excluded_user_id):
             recipients.add(collaborator.email)
     
     return list(recipients)
+
+def send_project_assignment_email_notification(project, assigned_by, assignee, role="collaborator"):
+    """Send email when a user is assigned to a project (as owner or collaborator)"""
+    
+    # Don't send email if the assignee is the same as the person assigning
+    if assigned_by.id == assignee.id:
+        return
+    
+    print(f"DEBUG: Sending project assignment email to {assignee.email}")
+    
+    subject = f"👥 You've been assigned to project: {project.name}"
+    
+    message = f"""
+    <strong>You have been assigned as {role} to a project:</strong>
+    
+    <div style="background: #f8f9fa; padding: 15px; border-radius: 5px; border-left: 4px solid #2563eb; margin: 10px 0;">
+        <p><strong>Project:</strong> {project.name}</p>
+        <p><strong>Description:</strong> {project.description or 'No description provided'}</p>
+        <p><strong>Deadline:</strong> {project.deadline.strftime('%Y-%m-%d') if project.deadline else 'Not set'}</p>
+        <p><strong>Status:</strong> {project.status.value}</p>
+        <p><strong>Assigned by:</strong> {assigned_by.email}</p>
+        <p><strong>Project Owner:</strong> {project.owner.email}</p>
+    </div>
+    
+    <strong>Your Role:</strong> {role.title()}
+    
+    <strong>Team Members:</strong>
+    <ul>
+        <li>{project.owner.email} (Owner)</li>
+        {"".join([f"<li>{collab.email} (Collaborator)</li>" for collab in project.collaborators])}
+    </ul>
+    
+    <em>You can now view and contribute to this project.</em>
+    """
+    
+    success = email_service.send_notification_email(
+        [assignee.email],
+        subject,
+        message,
+        project.name,
+        project.id,
+        "project_assignment"
+    )
+    
+    print(f"DEBUG: Project assignment email sent to {assignee.email}: {success}")
+
+def send_task_attachment_email_notification(task, added_by, attachment_filename):
+    """Send email notification when attachment is added to task"""
+    recipients = get_notification_recipients(task, added_by.id)
+    
+    print(f"DEBUG: Task attachment email - Task: {task.title}")
+    print(f"DEBUG: Added by: {added_by.email}")
+    print(f"DEBUG: Attachment: {attachment_filename}")
+    print(f"DEBUG: Recipients: {recipients}")
+    
+    if not recipients:
+        print("DEBUG: No recipients found for task attachment email")
+        return
+    
+    subject = f"📎 Attachment added to task: {task.title}"
+    
+    message = f"""
+    <strong>📎 New attachment has been added to task '{task.title}' by {added_by.email}:</strong>
+    
+    <div style="background: #f8f9fa; padding: 15px; border-radius: 5px; border-left: 4px solid #2563eb; margin: 10px 0;">
+        <p><strong>Attachment:</strong> {attachment_filename}</p>
+        <p><strong>Task:</strong> {task.title}</p>
+        <p><strong>Project:</strong> {task.project.name if task.project else 'No Project'}</p>
+        <p><strong>Added by:</strong> {added_by.email}</p>
+        <p><strong>Added on:</strong> {datetime.now().strftime('%Y-%m-%d %H:%M')}</p>
+    </div>
+    
+    <strong>Task Details:</strong>
+    <ul>
+        <li><strong>Due Date:</strong> {task.duedate.strftime('%Y-%m-%d') if task.duedate else 'Not set'}</li>
+        <li><strong>Status:</strong> {task.status.value}</li>
+        <li><strong>Priority:</strong> {task.priority}</li>
+    </ul>
+    
+    <em>You can view and download this attachment in the task details.</em>
+    """
+    
+    success = email_service.send_notification_email(
+        recipients,
+        subject,
+        message,
+        task.title,
+        task.id,
+        "task_attachment_added"
+    )
+    
+    print(f"DEBUG: Task attachment email sent successfully: {success}")
+
+def send_project_attachment_email_notification(project, added_by, attachment_filename):
+    """Send email notification when attachment is added to project"""
+    recipients = get_project_notification_recipients(project, added_by.id)
+    
+    print(f"DEBUG: Project attachment email - Project: {project.name}")
+    print(f"DEBUG: Added by: {added_by.email}")
+    print(f"DEBUG: Attachment: {attachment_filename}")
+    print(f"DEBUG: Recipients: {recipients}")
+    
+    if not recipients:
+        print("DEBUG: No recipients found for project attachment email")
+        return
+    
+    subject = f"📎 Attachment added to project: {project.name}"
+    
+    message = f"""
+    <strong>📎 New attachment has been added to project '{project.name}' by {added_by.email}:</strong>
+    
+    <div style="background: #f8f9fa; padding: 15px; border-radius: 5px; border-left: 4px solid #2563eb; margin: 10px 0;">
+        <p><strong>Attachment:</strong> {attachment_filename}</p>
+        <p><strong>Project:</strong> {project.name}</p>
+        <p><strong>Description:</strong> {project.description or 'No description provided'}</p>
+        <p><strong>Added by:</strong> {added_by.email}</p>
+        <p><strong>Added on:</strong> {datetime.now().strftime('%Y-%m-%d %H:%M')}</p>
+    </div>
+    
+    <strong>Project Details:</strong>
+    <ul>
+        <li><strong>Deadline:</strong> {project.deadline.strftime('%Y-%m-%d') if project.deadline else 'Not set'}</li>
+        <li><strong>Status:</strong> {project.status.value}</li>
+        <li><strong>Owner:</strong> {project.owner.email}</li>
+    </ul>
+    
+    <em>You can view and download this attachment in the project details.</em>
+    """
+    
+    success = email_service.send_notification_email(
+        recipients,
+        subject,
+        message,
+        project.name,
+        project.id,
+        "project_attachment_added"
+    )
+    
+    print(f"DEBUG: Project attachment email sent successfully: {success}")
+
+def send_task_attachment_removal_email_notification(task: Task, removed_by: User, attachment_filename: str):
+    """Send email notification when attachment is removed from task"""
+    recipients = get_notification_recipients(task, removed_by.id)
+    
+    print(f"DEBUG: Task attachment REMOVAL email - Task: {task.title}")
+    print(f"DEBUG: Removed by: {removed_by.email}")
+    print(f"DEBUG: Attachment: {attachment_filename}")
+    print(f"DEBUG: Recipients: {recipients}")
+    
+    if not recipients:
+        print("DEBUG: No recipients found for task attachment removal email")
+        return
+    
+    subject = f"🗑️ Attachment removed from task: {task.title}"
+    
+    message = f"""
+    <strong>🗑️ Attachment has been removed from task '{task.title}' by {removed_by.email}:</strong>
+    
+    <div style="background: #f8f9fa; padding: 15px; border-radius: 5px; border-left: 4px solid #dc3545; margin: 10px 0;">
+        <p><strong>Removed Attachment:</strong> {attachment_filename}</p>
+        <p><strong>Task:</strong> {task.title}</p>
+        <p><strong>Project:</strong> {task.project.name if task.project else 'No Project'}</p>
+        <p><strong>Removed by:</strong> {removed_by.email}</p>
+        <p><strong>Removed on:</strong> {datetime.now().strftime('%Y-%m-%d %H:%M')}</p>
+    </div>
+    
+    <strong>Task Details:</strong>
+    <ul>
+        <li><strong>Due Date:</strong> {task.duedate.strftime('%Y-%m-%d') if task.duedate else 'Not set'}</li>
+        <li><strong>Status:</strong> {task.status.value}</li>
+        <li><strong>Priority:</strong> {task.priority}</li>
+    </ul>
+    
+    <em>This attachment is no longer available for download.</em>
+    """
+    
+    success = email_service.send_notification_email(
+        recipients,
+        subject,
+        message,
+        task.title,
+        task.id,
+        "task_attachment_removed"
+    )
+    
+    print(f"DEBUG: Task attachment removal email sent successfully: {success}")
+
