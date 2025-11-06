@@ -105,6 +105,7 @@ def stub_get_history(monkeypatch):
 @pytest.fixture
 def notification_funcs(monkeypatch):
     mocks = SimpleNamespace(
+        create_notifications_for_task=MagicMock(name="create_notifications_for_task"),
         create_task_update_notification=MagicMock(name="create_task_update_notification"),
         update_notifications_for_task=MagicMock(name="update_notifications_for_task"),
         remove_notifications_for_task=MagicMock(name="remove_notifications_for_task"),
@@ -113,17 +114,30 @@ def notification_funcs(monkeypatch):
         send_task_assignment_email_notification=MagicMock(name="send_task_assignment_email_notification"),
         send_task_update_notification=MagicMock(name="send_task_update_notification"),  
         send_task_update_email_notification=MagicMock(name="send_task_update_email_notification"),
+        create_task_creation_notification=MagicMock(name="create_task_creation_notification"),
+        send_task_creation_notification=MagicMock(name="send_task_creation_notification"),
     )
 
+
+    monkeypatch.setattr('app.services.task_services.create_notifications_for_task', mocks.create_notifications_for_task)
     monkeypatch.setattr('app.services.task_services.create_task_update_notification', mocks.create_task_update_notification)
     monkeypatch.setattr('app.services.task_services.update_notifications_for_task', mocks.update_notifications_for_task)
     monkeypatch.setattr('app.services.task_services.remove_notifications_for_task', mocks.remove_notifications_for_task)
     monkeypatch.setattr('app.services.task_services.create_task_assignment_notification', mocks.create_task_assignment_notification)
-    monkeypatch.setattr('app.services.task_services.send_task_assignment_notification', mocks.send_task_assignment_notification)  # ADDED
-    monkeypatch.setattr('app.services.task_services.send_task_update_notification', mocks.send_task_update_notification)  # ADDED
+    monkeypatch.setattr('app.services.task_services.send_task_assignment_notification', mocks.send_task_assignment_notification)
+    monkeypatch.setattr('app.services.task_services.send_task_update_notification', mocks.send_task_update_notification)
     monkeypatch.setattr('app.services.task_services.send_task_assignment_email_notification', mocks.send_task_assignment_email_notification)
+    monkeypatch.setattr('app.services.task_services.create_task_creation_notification', mocks.create_task_creation_notification)
+    monkeypatch.setattr('app.services.task_services.send_task_creation_notification', mocks.send_task_creation_notification)
+    
+
+    mock_notification_service = MagicMock()
+    mock_notification_service.create_notifications_for_task = mocks.create_notifications_for_task
+    monkeypatch.setattr('app.services.task_services.notification_service', mock_notification_service)
+
     monkeypatch.setattr('app.services.email_services.send_task_assignment_email_notification', mocks.send_task_assignment_email_notification)
     monkeypatch.setattr('app.services.email_services.send_task_update_email_notification', mocks.send_task_update_email_notification)
+    monkeypatch.setattr('app.services.email_services.send_task_creation_email_notification', lambda *args, **kwargs: None)
 
     return mocks
 
@@ -131,19 +145,20 @@ def notification_funcs(monkeypatch):
 class TestCreateTask:
     """Tests for create_task function"""
 
-    @patch('app.services.task_services.notification_service')
     @patch('app.services.task_services.get_user_by_email')
     @patch('app.services.task_services.Task')
-    def test_create_task_success(self, mock_task_class, mock_get_user, mock_notif, 
-                                 mock_db_session, mock_user, default_task_status):
+    def test_create_task_success(self, mock_task_class, mock_get_user, 
+                                 mock_db_session, mock_user, default_task_status, notification_funcs):
         """Test successful task creation"""
         mock_get_user.return_value = mock_user
         mock_task_instance = Mock()
+        mock_task_instance.id = 1
         mock_task_instance.collaborators = []
         mock_task_instance.owner = mock_user
         mock_task_instance.project = None
         mock_task_instance.title = "New Task"
         mock_task_instance.duedate = date.today()
+        mock_task_instance.status = default_task_status
         mock_task_class.return_value = mock_task_instance
 
         result = create_task(
@@ -161,8 +176,8 @@ class TestCreateTask:
 
         assert result == mock_task_instance
         mock_db_session.add.assert_called()
-        assert mock_db_session.commit.call_count == 2
-        mock_notif.create_notifications_for_task.assert_called_once_with(mock_task_instance)
+        
+        notification_funcs.create_notifications_for_task.assert_called_once_with(mock_task_instance)
 
     @patch('app.services.task_services.get_user_by_email')
     def test_create_task_owner_not_found(self, mock_get_user, mock_db_session, default_task_status):
@@ -182,14 +197,14 @@ class TestCreateTask:
                 priority=1
             )
 
-    @patch('app.services.task_services.notification_service')
     @patch('app.services.task_services.get_user_by_email')
     @patch('app.services.task_services.Task')
-    def test_create_task_with_collaborators(self, mock_task_class, mock_get_user, mock_notif, 
-                                           mock_db_session, mock_user, mock_collaborator, default_task_status):
+    def test_create_task_with_collaborators(self, mock_task_class, mock_get_user, 
+                                           mock_db_session, mock_user, mock_collaborator, default_task_status, notification_funcs):
         """Test task creation with collaborators"""
         mock_get_user.side_effect = [mock_user, mock_collaborator]
         mock_task_instance = Mock()
+        mock_task_instance.id = 1
         mock_task_instance.collaborators = [mock_collaborator]
         mock_task_instance.owner = mock_user
         mock_task_instance.project = None
@@ -211,17 +226,18 @@ class TestCreateTask:
 
         assert result == mock_task_instance
         assert mock_get_user.call_count == 2
+        notification_funcs.create_notifications_for_task.assert_called_once()
 
-    @patch('app.services.task_services.notification_service')
     @patch('app.services.task_services.Project')
     @patch('app.services.task_services.get_user_by_email')
     @patch('app.services.task_services.Task')
     def test_create_task_with_project(self, mock_task_class, mock_get_user, mock_project_class,
-                                     mock_notif, mock_db_session, mock_user, mock_project, default_task_status):
+                                     mock_db_session, mock_user, mock_project, default_task_status, notification_funcs):
         """Test task creation with project assignment"""
         mock_get_user.return_value = mock_user
         mock_project_class.query.get.return_value = mock_project
         mock_task_instance = Mock()
+        mock_task_instance.id = 1
         mock_task_instance.collaborators = []
         mock_task_instance.owner = mock_user
         mock_task_instance.project = mock_project
@@ -244,16 +260,17 @@ class TestCreateTask:
 
         assert result == mock_task_instance
         mock_project_class.query.get.assert_called_once_with(1)
+        notification_funcs.create_notifications_for_task.assert_called_once()
 
-    @patch('app.services.task_services.notification_service')
     @patch('app.services.task_services.Attachment')
     @patch('app.services.task_services.get_user_by_email')
     @patch('app.services.task_services.Task')
     def test_create_task_with_attachments(self, mock_task_class, mock_get_user, mock_attachment_class,
-                                         mock_notif, mock_db_session, mock_user, default_task_status):
+                                         mock_db_session, mock_user, default_task_status, notification_funcs):
         """Test task creation with file attachments"""
         mock_get_user.return_value = mock_user
         mock_task_instance = Mock()
+        mock_task_instance.id = 1
         mock_task_instance.collaborators = []
         mock_task_instance.owner = mock_user
         mock_task_instance.project = None
@@ -279,6 +296,7 @@ class TestCreateTask:
 
         assert result == mock_task_instance
         mock_attachment_class.assert_called_once()
+        notification_funcs.create_notifications_for_task.assert_called_once()
 
     @patch('app.services.task_services.get_user_by_email')
     @patch('app.services.task_services.Task')

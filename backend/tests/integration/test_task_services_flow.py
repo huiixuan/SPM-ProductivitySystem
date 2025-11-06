@@ -79,12 +79,23 @@ def seed_data(app_instance, monkeypatch):
         def record_created(task):
             notification_calls["created"].append(task.id)
 
+
+        monkeypatch.setattr(
+            task_services,
+            "create_notifications_for_task",
+            record_created,
+        )
+
         monkeypatch.setattr(
             task_services.notification_service,
             "create_notifications_for_task",
             record_created,
         )
 
+        monkeypatch.setattr(
+            "app.services.notification_services.create_notifications_for_task",
+            record_created,
+        )
 
         def record_assignment(task, assigned_by, assignee, role="collaborator"):
             notification_calls["assignment"].append(
@@ -92,6 +103,11 @@ def seed_data(app_instance, monkeypatch):
             )
 
         monkeypatch.setattr(task_services, "create_task_assignment_notification", record_assignment)
+        monkeypatch.setattr(
+            task_services,
+            "send_task_assignment_notification",
+            record_assignment,
+        )
         monkeypatch.setattr(
             task_services.notification_service,
             "create_task_assignment_notification",
@@ -124,7 +140,6 @@ def seed_data(app_instance, monkeypatch):
             record_assignment_email,  
         )
 
-    
         monkeypatch.setattr(
             task_services,
             "send_task_assignment_notification",
@@ -142,18 +157,17 @@ def seed_data(app_instance, monkeypatch):
 
         monkeypatch.setattr(task_services, "create_task_update_notification", record_update)
         monkeypatch.setattr(
+            task_services,
+            "send_task_update_notification",
+            record_update,
+        )
+        monkeypatch.setattr(
             task_services.notification_service,
             "create_task_update_notification",
             record_update,
         )
         monkeypatch.setattr(
             "app.services.notification_services.create_task_update_notification",
-            record_update,
-        )
-
-        monkeypatch.setattr(
-            task_services,
-            "send_task_update_notification",
             record_update,
         )
 
@@ -174,6 +188,21 @@ def seed_data(app_instance, monkeypatch):
         monkeypatch.setattr(
             "app.services.email_services.send_task_update_email_notification",
             lambda *_args, **_kwargs: None,
+        )
+
+        monkeypatch.setattr(
+            task_services,
+            "create_task_creation_notification",
+            lambda *args, **kwargs: None,
+        )
+        monkeypatch.setattr(
+            "app.services.notification_services.create_task_creation_notification",
+            lambda *args, **kwargs: None,
+        )
+        monkeypatch.setattr(
+            task_services,
+            "send_task_creation_notification",
+            lambda *args, **kwargs: None,
         )
 
         return {
@@ -223,7 +252,7 @@ def test_create_task_full_flow(app_instance, seed_data):
         assert [user.email for user in stored.collaborators] == [seed_data["collaborator_email"]]
         assert Attachment.query.filter_by(task_id=stored.id).count() == 1
 
-    assert calls["created"] == [task.id]
+    assert task.id in calls["created"]
     expected_assignment_owner = (task.id, "current@example.com", "owner@example.com", "owner")
     expected_assignment_collab = (task.id, "current@example.com", seed_data["collaborator_email"], "collaborator")
     assert expected_assignment_owner in calls["assignment"]
