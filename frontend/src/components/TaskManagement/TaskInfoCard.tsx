@@ -35,7 +35,9 @@ interface Task {
   attachments?: {
     id: number,
     filename: string
-  }[]
+  }[],
+  recurrence_type: string,
+  recurrence_interval: number
 }
 
 type TaskInfoCardProps = {

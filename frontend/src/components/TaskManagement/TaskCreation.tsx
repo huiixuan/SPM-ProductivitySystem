@@ -48,6 +48,7 @@ type TaskCreationProps = {
 	projectId?: number;
 	onTaskCreated?: () => void;
 	isProjectTask?: boolean;
+	parentTaskId?: string;
 };
 
 const formSchema = z.object({
@@ -82,6 +83,7 @@ export default function TaskCreation({
 	projectId,
 	onTaskCreated,
 	isProjectTask,
+	parentTaskId
 }: TaskCreationProps) {
 	const [internalOpen, setInternalOpen] = useState<boolean>(false);
 	const statuses = ["Unassigned", "Ongoing", "Pending Review", "Completed"];
@@ -167,6 +169,10 @@ export default function TaskCreation({
 		formData.append("recurrence", values.recurrence)
 		if (values.recurrence === "custom" && values.customInterval) {
 			formData.append("custom_interval", values.customInterval.toString())
+		}
+
+		if (parentTaskId) {
+			formData.append("parent_task_id", parentTaskId)
 		}
 
 		try {

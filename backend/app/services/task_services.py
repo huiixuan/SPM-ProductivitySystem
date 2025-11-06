@@ -45,7 +45,7 @@ class _NotificationFacade:
 
 notification_service = _NotificationFacade()
 
-def create_task(title, description, duedate, status, owner_email, collaborator_emails, attachments, notes, priority, project_id=None, recurrence="none", customInterval=None):
+def create_task(title, description, duedate, status, owner_email, collaborator_emails, attachments, notes, priority, project_id=None, recurrence="none", customInterval=None, parent_task_id=None):
     try:
         owner = get_user_by_email(owner_email)
         if not owner:
@@ -62,7 +62,7 @@ def create_task(title, description, duedate, status, owner_email, collaborator_e
         recurrence_type = RecurrenceType(recurrence) if is_recurring else RecurrenceType("none")
         recurrence_interval = customInterval if recurrence == "custom" else None
 
-        task = Task(title=title, description=description, duedate=duedate, status=status, owner=owner, collaborators=collaborators, notes=notes, priority=priority, isRecurring=is_recurring, recurrence_type=recurrence_type, recurrence_interval=recurrence_interval)
+        task = Task(title=title, description=description, duedate=duedate, status=status, owner=owner, collaborators=collaborators, notes=notes, priority=priority, isRecurring=is_recurring, recurrence_type=recurrence_type, recurrence_interval=recurrence_interval, parent_id=parent_task_id)
 
         if project_id:
             project = Project.query.get(project_id)
@@ -504,3 +504,11 @@ def update_task(task_id, data, new_files):
         print(f"Unexpected error: {e}")
         db.session.rollback()
         raise
+
+def get_subtasks(parent_task_id):
+    try:
+        return Task.query.filter_by(parent_id=parent_task_id).all()
+    
+    except SQLAlchemyError as e:
+        db.session.rollback()
+        raise RuntimeError(f"Database error while getting subtasks of task {parent_task_id}: {e}")
