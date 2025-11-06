@@ -218,7 +218,7 @@ export default function TaskCreation({
 
 			<DialogContent className="sm:max-w-[830px]">
 				<DialogHeader>
-					<DialogTitle>Add New Task</DialogTitle>
+					<DialogTitle>Create New Task</DialogTitle>
 					<DialogDescription>
 						Fill in the details below to add a new task.
 					</DialogDescription>
