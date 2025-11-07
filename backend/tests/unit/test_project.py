@@ -224,3 +224,148 @@ def test_project_jwt_required(client):
     unauth_report = client.get("/api/project/get-report-data/1")
     assert unauth_report.status_code == 401
 
+
+from app.services.user_services import create_user
+
+def test_create_project_with_collaborators_and_attachments(client, tmp_path):
+    """Covers project creation with attachments + collaborators (email + file paths)."""
+    with client.application.app_context():
+        # create owner and collaborator via service
+        owner = create_user("Owner", "owner@example.com", "Manager", "pass123")
+        collaborator = create_user("Collab", "collab@example.com", "Staff", "pass123")
+
+        # create a temporary file
+        dummy_file = tmp_path / "demo.txt"
+        dummy_file.write_text("sample content")
+
+        with open(dummy_file, "rb") as f:
+            form = {
+                "name": "Collab Project",
+                "description": "Project with attachments and collaborator",
+                "deadline": date.today().isoformat(),
+                "status": "In Progress",
+                "owner": owner.email,  # route expects email, not id
+                "collaborators": [collaborator.email],
+                "notes": "Attachment testing",
+            }
+            data = {**form, "attachments": (f, "demo.txt")}
+
+            token = create_access_token(identity=str(owner.id))
+            headers = {"Authorization": f"Bearer {token}"}
+
+            resp = client.post(
+                "/api/project/create-project",
+                data=data,
+                headers=headers,
+                content_type="multipart/form-data",
+            )
+
+        # ✅ assertions
+        assert resp.status_code in (200, 201), resp.get_json()
+        payload = resp.get_json()
+        assert payload.get("success") is True
+
+        project = Project.query.filter_by(name="Collab Project").first()
+        assert project is not None
+        assert project.owner_id == owner.id
+        assert project.attachments  # at least one file attached
+        assert project.notes == "Attachment testing"
+
+
+def test_create_project_owner_not_found(monkeypatch, app):
+    # call the service directly with owner lookup mocked to None
+    from app.services import project_services
+
+    monkeypatch.setattr(project_services, "get_user_by_email", lambda _: None)
+
+    with app.app_context():
+        with pytest.raises(ValueError):
+            project_services.create_project(
+                name="Invalid",
+                description="desc",
+                deadline=date.today(),
+                status="In Progress",
+                owner_email="ghost@mail.com",
+                collaborator_emails=[],
+                attachments=[],
+                notes="",
+                created_by=None,  # optional for this branch; error is raised before use
+            )
+            
+            
+def test_get_all_projects_user_not_found(monkeypatch, app):
+    """get_all_projects should return [] when the user cannot be looked up."""
+    from app.services import project_services
+
+    # Avoid touching real SQLAlchemy User.query (which needs app ctx).
+    class _DummyQuery:
+        def get(self, _):
+            return None  # simulate "user not found"
+
+    class _DummyUser:
+        query = _DummyQuery()
+
+    with app.app_context():
+        monkeypatch.setattr(project_services, "User", _DummyUser)
+        result = project_services.get_all_projects(user_id=999)
+        assert result == []
+
+
+
+
+def test_update_project_changes_fields(client):
+    with client.application.app_context():
+        owner = _create_user()
+        proj = Project(
+            name="Old Name",
+            description="Old Desc",
+            notes="Old Note",
+            deadline=date.today(),
+            status=ProjectStatus.IN_PROGRESS,
+            owner_id=owner.id,
+        )
+        db.session.add(proj)
+        db.session.commit()
+
+        data = {
+            "name": "New Name",
+            "description": "Updated Desc",
+            "notes": "Note updated",
+            "status": "Completed",
+        }
+        from app.services import project_services
+        updated = project_services.update_project(proj.id, data, [], [], updated_by=owner)
+        assert updated.name == "New Name"
+        assert updated.status == ProjectStatus.COMPLETED
+
+
+
+def test_get_project_report_data_permission_denied(app):
+    """User who is neither owner nor collaborator should be denied report access."""
+    from app.services import project_services
+    from app.services.user_services import create_user
+
+    with app.app_context():
+        # owner created by helper (uses user_manager@example.com)
+        owner = _create_user()
+
+        # create a distinct non-collaborator user to avoid UNIQUE(email) conflict
+        other = create_user("Other User", "other_user@example.com", "Staff", "pass123")
+
+        # project owned by `owner`
+        proj = Project(
+            name="Private",
+            description="secret",
+            notes="n/a",
+            deadline=date.today(),
+            status=ProjectStatus.IN_PROGRESS,
+            owner_id=owner.id,
+        )
+        db.session.add(proj)
+        db.session.commit()
+
+        # access as `other` should be denied
+        with pytest.raises(PermissionError):
+            project_services.get_project_report_data(project_id=proj.id, user_id=other.id)
+            
+
