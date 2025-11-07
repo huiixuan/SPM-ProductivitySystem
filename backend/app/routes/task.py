@@ -1,9 +1,8 @@
 ﻿from flask import Blueprint, jsonify, request, session
 from app.services import task_services
-from app.models import TaskStatus
+from app.models import db, User, Task, TaskStatus
 from datetime import datetime
 from sqlalchemy.exc import SQLAlchemyError
-from app.models import db, User, Task
 
 import traceback
 from flask_jwt_extended import jwt_required, get_jwt_identity
@@ -81,18 +80,6 @@ def create_task_route():
     except Exception as e:
         print("--- AN ERROR OCCURRED ---")
         traceback.print_exc()
-        print("--------------------------")
-        return jsonify({"error": "An internal error occurred"}), 500
-    
-    except ValueError as ve:
-        return jsonify({"success": False, "error": str(ve)}), 400
-    
-    except SQLAlchemyError as se:
-        return jsonify({"success": False, "error": str(se)}), 500
-    
-    except Exception as e:
-        print("--- AN ERROR OCCURRED ---")
-        traceback.print_exc() # This will print the full error traceback
         print("--------------------------")
         return jsonify({"error": "An internal error occurred"}), 500
 
@@ -196,6 +183,9 @@ def update_task_route(task_id):
         
         print("Update successful")
         return jsonify({"success": True, "task": task.to_dict()}), 200
+    
+    except ValueError as e:
+        return jsonify({"success": False, "message": str(e)}), 400
     
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
