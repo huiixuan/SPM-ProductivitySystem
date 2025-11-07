@@ -82,18 +82,6 @@ def create_task_route():
         traceback.print_exc()
         print("--------------------------")
         return jsonify({"error": "An internal error occurred"}), 500
-    
-    except ValueError as ve:
-        return jsonify({"success": False, "error": str(ve)}), 400
-    
-    except SQLAlchemyError as se:
-        return jsonify({"success": False, "error": str(se)}), 500
-    
-    except Exception as e:
-        print("--- AN ERROR OCCURRED ---")
-        traceback.print_exc() # This will print the full error traceback
-        print("--------------------------")
-        return jsonify({"error": "An internal error occurred"}), 500
 
 @task_bp.route("/get-task/<int:task_id>", methods=["GET"])
 @jwt_required()
