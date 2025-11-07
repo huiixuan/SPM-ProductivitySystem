@@ -128,11 +128,7 @@ def seed_data(app_instance, monkeypatch):
             lambda *_args, **_kwargs: None,
         )
 
-        monkeypatch.setattr(
-            task_services,
-            "send_task_assignment_email_notification",
-            record_assignment_email, 
-        )
+        # Removed invalid monkeypatch for send_task_assignment_email_notification
         monkeypatch.setattr(
             "app.services.email_services.send_task_assignment_email_notification",
             record_assignment_email,  
@@ -329,9 +325,9 @@ def test_update_task_covers_notifications(app_instance, seed_data, monkeypatch):
             "notes": "fresh",
             "owner": seed_data["new_owner_email"],
             "collaborators": json.dumps([seed_data["collaborator_email"]]),
-            "existing_attachments": json.dumps([
+            "existing_attachments": [
                 {"id": attachment_id, "filename": "keep.txt"}
-            ]),
+            ],
         },
         [new_file],
     )
