@@ -14,20 +14,11 @@ from app.services.notification_services import (
     create_comment_notification,
     create_task_update_notification,
     create_task_assignment_notification,
-    create_notifications_for_recurring_task,
-    send_recurring_task_created_email_notification,
-    create_task_creation_notification,
     send_task_update_notification,
     send_task_assignment_notification, 
-    send_project_assignment_notification,
     create_recurring_task_creation_notification  
 )
-
 from flask_jwt_extended import get_jwt_identity
-from app.services.email_services import (
-    send_task_creation_email_notification,
-    send_task_assignment_email_notification
-)
 
 class _NotificationFacade:
     def create_notifications_for_task(self, *args, **kwargs):
@@ -139,8 +130,6 @@ def create_next_recurring_task(completed_task: Task):
         return None
 
     old_due = completed_task.duedate
-    if isinstance(old_due, str):
-        old_due = datetime.fromisoformat(old_due)
 
     recurrence_type = completed_task.recurrence_type
     
@@ -159,9 +148,6 @@ def create_next_recurring_task(completed_task: Task):
 
         else:
             raise ValueError("Custom interval is missing or invalid for recurring task")
-        
-    else:
-        new_due = old_due
 
     print(f"[DEBUG] Creating next recurring task due on: {new_due}")
 
@@ -240,6 +226,7 @@ def get_project_tasks(project_id):
         raise RuntimeError(f"Database error while retrieving tasks of project {project_id}: {e}")
     
 def get_project_users_for_tasks(task_id):
+    project_id = None
     try:
         task = Task.query.get(task_id)
         if not task:
@@ -253,7 +240,7 @@ def get_project_users_for_tasks(task_id):
     
     except SQLAlchemyError as e:
         db.session.rollback()
-        raise RuntimeError(f"Database error while retrieving users of project {project_id}: {e}")
+        raise RuntimeError(f"Database error while retrieving users of project {project_id or ''}: {e}")
 
 def get_unassigned_tasks():
     try:
@@ -447,12 +434,6 @@ def update_task(task_id, data, new_files):
         if "existing_attachments" in data:
             existing_attachments = data["existing_attachments"]
             print(f"DEBUG: Existing attachments from form: {existing_attachments}")
-            
-            if isinstance(existing_attachments, str):
-                try:
-                    existing_attachments = json.loads(existing_attachments)
-                except json.JSONDecodeError:
-                    existing_attachments = []
             
             existing_ids = [att.get("id") for att in existing_attachments if att.get("id")]
             print(f"DEBUG: Attachment IDs to keep: {existing_ids}")
