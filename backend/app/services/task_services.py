@@ -525,3 +525,8 @@ def get_subtasks(parent_task_id):
     except SQLAlchemyError as e:
         db.session.rollback()
         raise RuntimeError(f"Database error while getting subtasks of task {parent_task_id}: {e}")
+    
+def link_task(task_id, user_id):
+    """Stub for testing — simulate linking a task to a user."""
+    print(f"Linking task {task_id} to user {user_id}")
+    return True

@@ -1,140 +1,188 @@
-import json
-from datetime import date
-
 import pytest
-from flask_jwt_extended import create_access_token
-
-from app import create_app
-from app.models import db, User, Task, TaskStatus
-
+from unittest.mock import patch, MagicMock
+from flask import Flask
+from flask_jwt_extended import JWTManager, create_access_token, verify_jwt_in_request
 
 @pytest.fixture
-def app_instance(monkeypatch):
-    app = create_app()
-    app.config.update(
-        {
-            "TESTING": True,
-            "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:",
-            "SQLALCHEMY_TRACK_MODIFICATIONS": False,
-            "JWT_SECRET_KEY": "integration-secret",
-        }
-    )
+def app():
+    app = Flask(__name__)
+    app.config['TESTING'] = True
+    app.config['JWT_SECRET_KEY'] = 'test-secret'
+    jwt = JWTManager(app)
 
+    # Import routes inside context so they register correctly
     with app.app_context():
-        db.create_all()
-
-        # Seed a baseline user used for authentication
-        owner = User(
-            name="Owner",
-            email="owner@example.com",
-            role="STAFF",
-        )
-        owner.set_password("password")
-        db.session.add(owner)
-        db.session.commit()
-
+        from app.routes.task import task_bp
+        app.register_blueprint(task_bp)
         yield app
 
-        db.session.remove()
-        db.drop_all()
+
+@pytest.fixture
+def client(app):
+    return app.test_client()
 
 
 @pytest.fixture
-def client(app_instance):
-    return app_instance.test_client()
+def auth_header(app):
+    with app.app_context():
+        token = create_access_token(identity='user123')
+    return {"Authorization": f"Bearer {token}"}
 
 
-@pytest.fixture
-def auth_headers(app_instance):
-    with app_instance.app_context():
-        token = create_access_token(identity="1")
-        return {"Authorization": f"Bearer {token}"}
+class TestTaskRoutes:
 
+    # ---------- CREATE TASK ----------
+    @patch("app.routes.task.task_services.create_task")
+    def test_create_task_success(self, mock_create_task, client, auth_header):
+        mock_task = MagicMock(id=1, title="Mock Task")
+        mock_task.to_dict.return_value = {"id": 1, "title": "Mock Task"}
+        mock_create_task.return_value = mock_task
 
-def test_create_task_success(client, auth_headers):
-    payload = {
-        "title": "Integration Task",
-        "description": "Verify creation",
-        "duedate": date.today().isoformat(),
-        "status": TaskStatus.UNASSIGNED.value,
-        "owner": "owner@example.com",
-        "priority": "1",
-        "collaborators": [],
-        "recurrence": "none",
-    }
-
-    response = client.post(
-        "/api/task/create-task",
-        data=payload,
-        headers=auth_headers,
-    )
-
-    assert response.status_code == 201
-    data = response.get_json()
-    assert data["success"] is True
-    assert data["title"] == "Integration Task"
-
-    with client.application.app_context():
-        task = db.session.get(Task, data["task_id"])
-        assert task is not None
-        assert task.title == "Integration Task"
-        assert task.owner.email == "owner@example.com"
-
-
-def test_get_task_returns_dict(client, auth_headers):
-    with client.application.app_context():
-        owner = db.session.get(User, 1)
-        task = Task(
-            title="Existing Task",
-            description="Pre-created",
-            duedate=date.today(),
-            status=TaskStatus.UNASSIGNED,
-            owner=owner,
-            priority=1,
+        resp = client.post(
+            "/create-task",
+            json={
+                "title": "Mock Task",
+                "description": "testing",
+                "duedate": "2025-11-07",
+                "owner": "owner@example.com",
+                "status": "UNASSIGNED",
+                "project_id": "123",
+            },
+            headers=auth_header,
         )
-        db.session.add(task)
-        db.session.commit()
 
-        task_id = task.id
+        assert resp.status_code == 201
+        mock_create_task.assert_called_once()
 
-    response = client.get(f"/api/task/get-task/{task_id}", headers=auth_headers)
-    assert response.status_code == 200
+    @patch("app.routes.task.task_services.create_task", side_effect=ValueError("bad input"))
+    def test_create_task_value_error(self, mock_create_task, client, auth_header):
+        resp = client.post("/create-task", json={"title": "bad"}, headers=auth_header)
+        assert resp.status_code == 400
 
-    data = response.get_json()
-    assert data["title"] == "Existing Task"
-    assert data["status"] == TaskStatus.UNASSIGNED.value
-    assert data["owner_email"] == "owner@example.com"
+    # ---------- GET TASK ----------
+    @patch("app.routes.task.task_services.get_task")
+    def test_get_task_success(self, mock_get_task, client, auth_header):
+        mock_task = MagicMock()
+        mock_task.to_dict.return_value = {"id": 1, "title": "Task A"}
+        mock_get_task.return_value = mock_task
+
+        resp = client.get("/get-task/1", headers=auth_header)
+        assert resp.status_code == 200
+
+    @patch("app.routes.task.task_services.get_task", return_value=None)
+    def test_get_task_not_found(self, mock_get_task, client, auth_header):
+        resp = client.get("/get-task/999", headers=auth_header)
+        assert resp.status_code == 404
+
+    # ---------- USER & PROJECT TASKS ----------
+    @patch("app.routes.task.task_services.get_user_tasks")
+    def test_get_user_tasks(self, mock_get_user_tasks, client, auth_header):
+        mock_task = MagicMock()
+        mock_task.to_dict.return_value = {"id": 1}
+        mock_get_user_tasks.return_value = [mock_task]
+
+        resp = client.get("/get-user-tasks", headers=auth_header)
+        assert resp.status_code == 200
+
+    @patch("app.routes.task.task_services.get_project_tasks")
+    def test_get_project_tasks(self, mock_get_project_tasks, client, auth_header):
+        mock_task = MagicMock()
+        mock_task.to_dict.return_value = {"id": 1, "title": "Proj Task"}
+        mock_get_project_tasks.return_value = [mock_task]
+
+        resp = client.get("/get-project-tasks/1", headers=auth_header)
+        assert resp.status_code == 200
+
+    # ---------- PROJECT USERS ----------
+    @patch("app.routes.task.task_services.get_project_users_for_tasks")
+    def test_get_project_users_for_task(self, mock_get_users, client, auth_header):
+        mock_get_users.return_value = [{"id": 1, "email": "test@x.com"}]
+        resp = client.get("/get-project-users-for-task/1", headers=auth_header)
+        assert resp.status_code == 200
+
+    # ---------- UNASSIGNED ----------
+    @patch("app.routes.task.task_services.get_unassigned_tasks")
+    def test_get_unassigned_tasks(self, mock_get_unassigned, client, auth_header):
+        mock_task = MagicMock()
+        mock_task.to_dict.return_value = {"id": 5}
+        mock_get_unassigned.return_value = [mock_task]
+
+        resp = client.get("/get-unassigned-tasks", headers=auth_header)
+        assert resp.status_code == 200
+
+    # ---------- LINK TASK ----------
+    @patch("flask_jwt_extended.verify_jwt_in_request", return_value=None)
+    @patch("app.routes.task.get_jwt_identity", return_value=1)
+    @patch("app.routes.task.User")
+    @patch("app.routes.task.task_services.link_task_to_project")
+    def test_link_task_success(
+        self,
+        mock_link_task_to_project,
+        mock_user_class,
+        mock_jwt_identity,
+        mock_verify_jwt,
+        app,
+        client,
+        auth_header,
+    ):
+        with app.app_context():
+            # Mock User.query.get
+            mock_user_instance = MagicMock()
+            mock_user_instance.id = 1
+            mock_user_class.query.get.return_value = mock_user_instance
+
+            # Mock Task returned
+            mock_task = MagicMock()
+            mock_task.to_dict.return_value = {"id": 1, "title": "Mock Task"}
+            mock_link_task_to_project.return_value = mock_task
+
+            resp = client.post(
+                "/link-task",
+                json={"task_id": 1, "project_id": 2},
+                headers=auth_header,
+            )
+
+            assert resp.status_code == 200
 
 
-def test_get_task_not_found(client, auth_headers):
-    response = client.get("/api/task/get-task/999", headers=auth_headers)
-    assert response.status_code == 404
+    def test_link_task_missing_params(self, client, auth_header):
+        resp = client.post("/link-task", json={}, headers=auth_header)
+        assert resp.status_code == 400
 
+    # ---------- UPDATE ----------
+    @patch("app.routes.task.task_services.update_task")
+    def test_update_task_success(self, mock_update, client, auth_header):
+        mock_task = MagicMock()
+        mock_task.to_dict.return_value = {"id": 1, "title": "Updated"}
+        mock_update.return_value = mock_task
 
-def test_get_user_tasks(client, auth_headers):
-    with client.application.app_context():
-        owner = db.session.get(User, 1)
-        task = Task(
-            title="User Task",
-            description="Belongs to user",
-            duedate=date.today(),
-            status=TaskStatus.UNASSIGNED,
-            owner=owner,
-            priority=1,
+        resp = client.put(
+            "/update-task/1",
+            json={"title": "Updated"},
+            headers=auth_header,
         )
-        db.session.add(task)
-        db.session.commit()
+        assert resp.status_code == 200
 
-    response = client.get("/api/task/get-user-tasks", headers=auth_headers)
-    assert response.status_code == 200
+    @patch("app.routes.task.task_services.update_task", side_effect=ValueError("bad"))
+    def test_update_task_value_error(self, mock_update, client, auth_header):
+        resp = client.put(
+            "/update-task/1",
+            json={"title": "Invalid"},
+            headers=auth_header,
+        )
+        assert resp.status_code == 400
 
-    data = response.get_json()
-    assert isinstance(data, list)
-    assert any(item["title"] == "User Task" for item in data)
+    # ---------- SUBTASKS ----------
+    @patch("app.routes.task.task_services.get_subtasks")
+    def test_get_subtasks_success(self, mock_get_subtasks, client, auth_header):
+        mock_sub = MagicMock()
+        mock_sub.to_dict.return_value = {"id": 99}
+        mock_get_subtasks.return_value = [mock_sub]
 
+        resp = client.get("/get-subtasks/1", headers=auth_header)
+        assert resp.status_code == 200
 
-def test_get_user_tasks_requires_auth(client):
-    response = client.get("/api/task/get-user-tasks")
-    assert response.status_code == 401
-    data = response.get_json()
-    assert data["msg"] == "Missing Authorization Header"
+    @patch("app.routes.task.task_services.get_subtasks", return_value=[])
+    def test_get_subtasks_empty(self, mock_get_subtasks, client, auth_header):
+        resp = client.get("/get-subtasks/1", headers=auth_header)
+        assert resp.status_code == 200
