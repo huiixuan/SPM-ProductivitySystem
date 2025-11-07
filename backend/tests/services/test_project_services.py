@@ -58,12 +58,12 @@ def test_create_project_with_collaborators(session, app_instance):
     with app_instance.app_context():
         owner = make_user("owner@example.com")
         collaborator = make_user("collab@example.com")
-        db.session.add_all([owner, collaborator])
+        created_by = make_user("creator@example.com")
+        db.session.add_all([owner, collaborator, created_by])
         db.session.commit()
 
-        with patch('flask_jwt_extended.get_jwt_identity', return_value=owner.id), \
-             patch('app.services.project_services.send_project_creation_email_notification') as mock_email, \
-             patch('app.services.project_services.send_project_collaborator_added_email_notification') as mock_collab_email:
+        with patch('flask_jwt_extended.get_jwt_identity', return_value=created_by.id), \
+             patch('app.services.notification_services.send_project_creation_notification') as mock_notification:
             project = create_project(
                 name="Launch",
                 description="New project",
@@ -73,9 +73,11 @@ def test_create_project_with_collaborators(session, app_instance):
                 collaborator_emails=[collaborator.email],
                 attachments=None,
                 notes="Important notes",
+                created_by=created_by  
             )
 
-            mock_email.assert_called_once()
+
+            mock_notification.assert_called_once()
 
         assert project.id is not None
         assert project.collaborators == [collaborator]
@@ -84,6 +86,10 @@ def test_create_project_with_collaborators(session, app_instance):
 
 def test_create_project_missing_owner_raises_value_error(app_instance):
     with app_instance.app_context():
+        created_by = make_user("creator@example.com")
+        db.session.add(created_by)
+        db.session.commit()
+        
         with pytest.raises(ValueError):
             create_project(
                 name="Missing Owner",
@@ -94,13 +100,15 @@ def test_create_project_missing_owner_raises_value_error(app_instance):
                 collaborator_emails=[],
                 attachments=None,
                 notes=None,
+                created_by=created_by 
             )
 
 
 def test_create_project_database_error_rolls_back(monkeypatch, app_instance):
     with app_instance.app_context():
         owner = make_user("owner2@example.com")
-        db.session.add(owner)
+        created_by = make_user("creator@example.com")
+        db.session.add_all([owner, created_by])
         db.session.commit()
 
         original_commit = db.session.commit
@@ -120,6 +128,7 @@ def test_create_project_database_error_rolls_back(monkeypatch, app_instance):
                 collaborator_emails=None,
                 attachments=None,
                 notes=None,
+                created_by=created_by 
             )
 
         monkeypatch.setattr(db.session, "commit", original_commit)
@@ -199,13 +208,15 @@ def test_update_project_changes_core_fields_and_collaborators(app_instance):
         }
 
         with patch("flask_jwt_extended.get_jwt_identity", return_value=owner.id), \
-             patch("app.services.project_services.send_project_update_email_notification"), \
-             patch("app.services.project_services.send_project_collaborator_added_email_notification"):
+             patch("app.services.notification_services.create_project_update_notification"), \
+             patch("app.services.notification_services.send_project_update_email_notification"), \
+             patch("app.services.notification_services.send_project_assignment_notification"):
             updated = update_project(
                 project.id,
                 data,
                 new_files=[],
                 collaborator_emails=[collaborator.email],
+                updated_by=owner 
             )
 
         assert updated.name == "Updated"
@@ -229,4 +240,5 @@ def test_update_project_invalid_status_raises_value_error(app_instance):
                 {"status": "NOT_A_REAL_STATUS"},
                 new_files=[],
                 collaborator_emails=[],
+                updated_by=owner 
             )
