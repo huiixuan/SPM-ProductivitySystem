@@ -4,6 +4,33 @@ from datetime import date
 from flask_jwt_extended import create_access_token
 from app.models import db, User, Project, ProjectStatus
 
+import pytest
+from app.services import project_services 
+from app.models import User
+
+from flask_jwt_extended import create_access_token
+
+@pytest.fixture
+def mock_auth_with_token(mocker, app): # <-- 1. RENAME THE FUNCTION
+    """
+    Fixture to mock auth functions and create a real access token.
+    Returns a valid access token string.
+    """
+    user_id = 1
+    
+    # Mock get_jwt_identity()
+    mocker.patch('app.routes.project.get_jwt_identity', return_value=user_id)
+    
+    # Mock User.query.get()
+    mock_user = User(id=user_id, email='test@example.com')
+    # Make sure this mock path is correct for where User.query.get is called
+    mocker.patch('app.routes.project.User.query.get', return_value=mock_user) 
+    
+    # 2. CREATE A REAL TOKEN
+    with app.app_context():
+        access_token = create_access_token(identity=user_id)
+    
+    return access_token
 
 @pytest.fixture
 def app():
@@ -368,4 +395,216 @@ def test_get_project_report_data_permission_denied(app):
         with pytest.raises(PermissionError):
             project_services.get_project_report_data(project_id=proj.id, user_id=other.id)
             
+
+# apps route/user.py coverage 
+#don't edit done...!
+
+def test_get_all_users_success(client, monkeypatch):
+    """
+    GET /api/user/get-all-users returns a list when service succeeds.
+    Covers the 'try' branch (lines 8-10).
+    """
+    import app.routes.user as user_routes
+
+    # Stub the service to return predictable data
+    monkeypatch.setattr(user_routes, "get_users_info", lambda: [{"id": 1, "email": "a@example.com"}])
+
+    resp = client.get("/api/user/get-all-users")
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert isinstance(data, list)
+    assert data and data[0]["id"] == 1
+    assert data[0]["email"] == "a@example.com"
+
+
+def test_get_all_users_error(client, monkeypatch):
+    """
+    GET /api/user/get-all-users returns 500 JSON with error when service raises.
+    Covers the 'except' branch (lines 12-13).
+    """
+    import app.routes.user as user_routes
+
+    def boom():
+        raise RuntimeError("fake failure")
+
+    monkeypatch.setattr(user_routes, "get_users_info", boom)
+
+    resp = client.get("/api/user/get-all-users")
+    assert resp.status_code == 500
+    data = resp.get_json()
+    assert data["success"] is False
+    assert "fake failure" in data["error"]
+    
+    
+    
+# app/routes/attachment.py
+# ---------- /api/attachment/get-attachment/<id> ----------
+
+
+
+def test_get_task_attachments_error_path(client, monkeypatch):
+    import app.routes.attachment as attachment_routes
+
+    def boom(_):  # simulate service failure
+        raise RuntimeError("DB down")
+
+    monkeypatch.setattr(
+        attachment_routes.attachment_services,
+        "get_attachment_by_task",
+        boom,
+    )
+
+    resp = client.get("/api/attachment/get-task-attachments/42")
+    assert resp.status_code == 500
+    body = resp.get_json()
+    assert body["success"] is False
+    assert "DB down" in body["error"]
+
+
+
+def test_get_attachment_not_found(client, monkeypatch):
+    """Returns 404 JSON when service returns None (covers line 11 -> 13)."""
+    import app.routes.attachment as attachment_routes
+
+    monkeypatch.setattr(
+        attachment_routes.attachment_services,
+        "get_attachment",
+        lambda _id: None,
+    )
+
+    resp = client.get("/api/attachment/get-attachment/999")
+    assert resp.status_code == 404
+    data = resp.get_json()
+    assert data == {"error": "Attachment not found."}
+
+
+def test_get_attachment_error(client, monkeypatch):
+    """Returns 500 JSON when service raises (covers except block lines 21-22)."""
+    import app.routes.attachment as attachment_routes
+
+    def boom(_id):
+        raise RuntimeError("disk error")
+
+    monkeypatch.setattr(
+        attachment_routes.attachment_services,
+        "get_attachment",
+        boom,
+    )
+
+    resp = client.get("/api/attachment/get-attachment/1")
+    assert resp.status_code == 500
+    data = resp.get_json()
+    assert data["success"] is False
+    assert "disk error" in data["error"]
+
+# ---------- /api/attachment/get-task-attachments/<task_id> ----------
+
+
+def test_get_task_attachments_error(client, monkeypatch):
+    """Returns 500 JSON when listing by task raises (covers except block lines 31-32)."""
+    import app.routes.attachment as attachment_routes
+
+    def boom(task_id):
+        raise ValueError("bad task id")
+
+    monkeypatch.setattr(
+        attachment_routes.attachment_services,
+        "get_attachment_by_task",
+        boom,
+    )
+
+    resp = client.get("/api/attachment/get-task-attachments/42")
+    assert resp.status_code == 500
+    data = resp.get_json()
+    assert data["success"] is False
+    assert "bad task id" in data["error"]
+    
+    
+    
+def test_get_attachment_route_streams_pdf(client, monkeypatch):
+    """Covers send_file branch when an attachment exists (lines 14–19)."""
+    import app.routes.attachment as attachment_routes
+    from types import SimpleNamespace
+
+    # Fake attachment object returned by the service
+    pdf_bytes = b"%PDF-1.4\n% test payload\n"
+    fake_attachment = SimpleNamespace(
+        content=pdf_bytes,
+        filename="report.pdf",
+    )
+
+    # Patch the service to return our fake attachment
+    monkeypatch.setattr(
+        attachment_routes.attachment_services,
+        "get_attachment",
+        lambda attachment_id: fake_attachment,
+    )
+
+    # Call the route
+    resp = client.get("/api/attachment/get-attachment/7")
+
+    # Assertions: status, mimetype, payload, and filename in headers
+    assert resp.status_code == 200
+    assert resp.mimetype == "application/pdf"
+    assert resp.data == pdf_bytes
+    # as_attachment=False ⇒ typically 'inline; filename=...'
+    cd = resp.headers.get("Content-Disposition", "")
+    assert "inline" in cd.lower()
+    assert "report.pdf" in cd
+
+
+
+def test_get_task_attachments_none_response_triggers_typeerror(client, monkeypatch):
+    """
+    Covers the bare `return` branch in get_attachment_by_task:
+    the view returns None -> Flask raises TypeError in make_response.
+    """
+    import app.routes.attachment as attachment_routes
+
+    # Service still returns something; the route's bare `return` causes None to be returned anyway.
+    monkeypatch.setattr(
+        attachment_routes.attachment_services,
+        "get_attachment_by_task",
+        lambda task_id: [{"id": 1, "filename": "a.pdf"}],
+    )
+
+    with pytest.raises(TypeError) as exc:
+        client.get("/api/attachment/get-task-attachments/42")
+
+    assert "did not return a valid response" in str(exc.value)
+
+
+def test_get_task_attachments_error_path_returns_500_json(client, monkeypatch):
+    """
+    Covers the except-path in get_attachment_by_task (lines 21–22):
+    if the service raises, the route returns JSON 500.
+    """
+    import app.routes.attachment as attachment_routes
+
+    def boom(_):
+        raise RuntimeError("db down")
+
+    monkeypatch.setattr(
+        attachment_routes.attachment_services,
+        "get_attachment_by_task",
+        boom,
+    )
+
+    resp = client.get("/api/attachment/get-task-attachments/1")
+    assert resp.status_code == 500
+    assert resp.is_json
+    body = resp.get_json()
+    assert body.get("success") is False
+    assert "db down" in body.get("error", "")
+    
+    
+#################################
+
+## services/project_service.py ##
+
+#################################
+
+
+
+
 
