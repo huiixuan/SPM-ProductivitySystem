@@ -63,3 +63,5 @@ All tests are located in the backend/tests/ directory. To run the tests:
 cd backend
 pytest tests/
 ```
+
+Link to github repo: https://github.com/huiixuan/SPM-ProductivitySystem.git
