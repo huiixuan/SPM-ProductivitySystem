@@ -434,7 +434,15 @@ def update_task(task_id, data, new_files):
         if "existing_attachments" in data:
             existing_attachments = data["existing_attachments"]
             print(f"DEBUG: Existing attachments from form: {existing_attachments}")
-            
+
+            if isinstance(existing_attachments, str):
+                try:
+                    existing_attachments = json.loads(existing_attachments)
+                except json.JSONDecodeError:
+                    existing_attachments = []
+
+            print(f"DEBUG: Parsed attachments: {existing_attachments}")
+
             existing_ids = [att.get("id") for att in existing_attachments if att.get("id")]
             print(f"DEBUG: Attachment IDs to keep: {existing_ids}")
             
